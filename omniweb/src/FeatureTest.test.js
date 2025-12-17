@@ -117,11 +117,10 @@ describe('OmniWeb Feature Tests', () => {
     await waitFor(() => {
       expect(screen.getByText('LEVEL 1')).toBeInTheDocument();
     });
-    expect(screen.getByText('Artificial Intelligence')).toBeInTheDocument();
+    expect(screen.getAllByText('Artificial Intelligence').length).toBeGreaterThan(0);
 
     // 3. Expand Node
-    const nodeCard = screen.getByText('Artificial Intelligence');
-    fireEvent.click(nodeCard);
+    // Auto-expansion happens, so Level 2 should appear automatically.
 
     // Verify new column appears
     await waitFor(() => {
@@ -182,6 +181,11 @@ describe('OmniWeb Feature Tests', () => {
   });
 
   test('Shows warning toast when expansion returns no children', async () => {
+    // Mock next expand to return empty (for the auto-expansion)
+    axios.post.mockResolvedValueOnce({
+      data: { children: [] }
+    });
+
     render(<App />);
 
     // Wait for models to load
@@ -192,18 +196,7 @@ describe('OmniWeb Feature Tests', () => {
     fireEvent.change(input, { target: { value: 'Empty Topic' } });
     fireEvent.click(screen.getByText('➜'));
 
-    // Wait for workspace
-    await waitFor(() => expect(screen.getByText('Empty Topic')).toBeInTheDocument());
-
-    // Mock next expand to return empty
-    axios.post.mockResolvedValueOnce({
-      data: { children: [] }
-    });
-
-    // Click node
-    fireEvent.click(screen.getByText('Empty Topic'));
-
-    // Verify toast
+    // Wait for workspace and toast
     await waitFor(() => {
         expect(screen.getByText('Could not expand this topic. Try again.')).toBeInTheDocument();
     });

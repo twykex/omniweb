@@ -45,17 +45,7 @@ describe('Regeneration Logic', () => {
   test('passes seen nodes to recent_nodes when regenerating', async () => {
     render(<App />);
 
-    // 1. Start App
-    const input = await screen.findByPlaceholderText(/What do you want to learn/i);
-    fireEvent.change(input, { target: { value: 'Start' } });
-    fireEvent.click(screen.getByText('➜'));
-
-    // Wait for Level 1
-    await screen.findByText('LEVEL 1');
-    const startNode = screen.getByText('Start');
-
-    // 2. Expand "Start"
-    // Mock expansion response
+    // Mock expansion response (will be used by auto-expand)
     axios.post.mockResolvedValueOnce({
       data: {
         children: [
@@ -65,7 +55,15 @@ describe('Regeneration Logic', () => {
       }
     });
 
-    fireEvent.click(startNode);
+    // 1. Start App
+    const input = await screen.findByPlaceholderText(/What do you want to learn/i);
+    fireEvent.change(input, { target: { value: 'Start' } });
+    fireEvent.click(screen.getByText('➜'));
+
+    // Wait for Level 1
+    await screen.findByText('LEVEL 1');
+
+    // Auto-expansion happens.
 
     // Wait for Level 2
     await screen.findByText('LEVEL 2');

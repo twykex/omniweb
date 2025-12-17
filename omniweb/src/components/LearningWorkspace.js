@@ -101,6 +101,14 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     } finally { setIsThinking(false); }
   };
 
+  // Auto-expand the first node on mount
+  useEffect(() => {
+    if (columns.length === 1 && !columns[0].selectedNode && columns[0].nodes.length === 1) {
+        handleNodeClick(0, columns[0].nodes[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleRegenerate = async (colIndex) => {
     if (isThinking) return;
     if (colIndex === 0) return;

@@ -106,11 +106,7 @@ describe('Refactored Quiz Features', () => {
              fireEvent.click(screen.getByText('➜'));
         });
 
-        const node = await screen.findByText('Test');
-
-        await act(async () => {
-             fireEvent.click(node);
-        });
+        await waitFor(() => expect(screen.getAllByText('Test').length).toBeGreaterThan(0));
 
         const quizBtn = await screen.findByText('Quiz');
 
