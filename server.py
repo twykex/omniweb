@@ -100,7 +100,10 @@ def analyze_node(req: AnalysisRequest):
     prompts = {
         "explain": f"Teach '{req.node}' to a beginner. Use a clear analogy (formatted as a > blockquote) to explain the core concept. Then detail how it works.",
         "history": f"Provide a historical timeline of '{req.node}'. Key figures, dates, and the 'Aha!' moment of discovery. Use Markdown lists.",
-        "impact": f"Analyze the significance of '{req.node}'. Why does it matter to humanity or the universe? What are the ethical or practical implications?"
+        "impact": f"Analyze the significance of '{req.node}'. Why does it matter to humanity or the universe? What are the ethical or practical implications?",
+        "eli5": f"Explain '{req.node}' to a 5-year-old. Use simple words and fun examples.",
+        "future": f"Speculate on the future of '{req.node}'. What advances or changes can we expect in the next 50 years?",
+        "quiz": f"Create a 3-question multiple choice quiz about '{req.node}'. Format: Question, Options, then Answer at the very end."
     }
 
     system_prompt = f"""
