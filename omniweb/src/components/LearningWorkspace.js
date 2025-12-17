@@ -340,7 +340,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 </div>
 
                 <div className="panel-tabs">
-                    {['explain', 'history', 'impact', 'eli5', 'future', 'code', 'proscons', 'debate', 'quiz'].map(m => (
+                    {['explain', 'history', 'impact', 'eli5', 'future', 'code', 'proscons', 'debate', 'glossary', 'sources', 'quiz'].map(m => (
                         <button
                             key={m}
                             className={lessonData.mode === m ? 'active' : ''}
@@ -391,6 +391,16 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         navigator.clipboard.writeText(lessonData.content);
                         addToast("Lesson text copied to clipboard", "success");
                     }}>COPY TEXT</button>
+                    <button onClick={() => {
+                        const blob = new Blob([lessonData.content], { type: "text/plain" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `${analyzingNode.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${lessonData.mode}.md`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        addToast("Lesson saved to file", "success");
+                    }}>SAVE FILE</button>
                     <button onClick={closeLesson}>CLOSE</button>
                 </div>
             </motion.div>
