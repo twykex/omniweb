@@ -7,9 +7,6 @@ import requests
 from config import OLLAMA_BASE
 
 def robust_json_parser(text):
-    text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"```", "", text)
-
     # Find the first brace/bracket
     start_obj = text.find('{')
     start_arr = text.find('[')
@@ -106,10 +103,22 @@ def get_gpu_vram():
                 return _GPU_VRAM_CACHE
 
         if platform.system() == "Darwin":
+            try:
+                # Check for Apple Silicon (returns 1 if true)
+                is_arm = subprocess.check_output(["sysctl", "-n", "hw.optional.arm64"], encoding="utf-8").strip() == "1"
+            except Exception:
+                is_arm = False
+
             output = subprocess.check_output(["sysctl", "-n", "hw.memsize"], encoding="utf-8", timeout=5)
             total_mem = int(output.strip())
-            _GPU_VRAM_CACHE = int(total_mem * 0.75)
-            return _GPU_VRAM_CACHE
+
+            if is_arm:
+                # Unified memory on Apple Silicon
+                _GPU_VRAM_CACHE = int(total_mem * 0.75)
+                return _GPU_VRAM_CACHE
+            else:
+                # Intel Mac (Integrated or Discrete) - detection is complex, better to return None
+                return None
 
     except Exception:
         pass
