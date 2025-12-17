@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
+import argparse
 import os
-import sys
-import subprocess
 import platform
-import time
-import signal
 import shutil
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+import webbrowser
+from urllib.request import urlopen, Request
+from urllib.error import URLError, HTTPError
 
 # Configuration
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -13,11 +19,90 @@ BACKEND_DIR = REPO_ROOT
 FRONTEND_DIR = os.path.join(REPO_ROOT, "omniweb")
 VENV_DIR = os.path.join(REPO_ROOT, ".venv")
 IS_WINDOWS = platform.system() == "Windows"
+OLLAMA_URL = "http://localhost:11434"
 
-def print_step(step):
-    print(f"\n{'='*50}")
-    print(f" {step}")
-    print(f"{'='*50}\n")
+# ANSI Colors
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+    @staticmethod
+    def print(msg, color=ENDC, bold=False, end='\n'):
+        if IS_WINDOWS:
+            os.system('color') # Enables ANSI in cmd
+        style = color
+        if bold:
+            style += Colors.BOLD
+        print(f"{style}{msg}{Colors.ENDC}", end=end)
+
+    @staticmethod
+    def step(msg):
+        print()
+        Colors.print(f"==> {msg}", Colors.OKBLUE, bold=True)
+
+    @staticmethod
+    def success(msg):
+        Colors.print(f"✓ {msg}", Colors.OKGREEN)
+
+    @staticmethod
+    def error(msg):
+        Colors.print(f"✗ {msg}", Colors.FAIL, bold=True)
+
+    @staticmethod
+    def warning(msg):
+        Colors.print(f"! {msg}", Colors.WARNING)
+
+def print_banner():
+    banner = r"""
+  _   _  ______  __   __  _    _    _____
+ | \ | ||  ____| \ \ / / | |  | |  / ____|
+ |  \| || |__     \ V /  | |  | | | (___
+ | . ` ||  __|     > <   | |  | |  \___ \
+ | |\  || |____   / . \  | |__| |  ____) |
+ |_| \_||______| /_/ \_\  \____/  |_____/
+
+         NEXUS LAUNCH SYSTEM v2.0
+    """
+    Colors.print(banner, Colors.OKCYAN, bold=True)
+
+def check_port(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex((host, port)) == 0
+
+def wait_for_port(host, port, timeout=30):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if check_port(host, port):
+            return True
+        time.sleep(0.5)
+    return False
+
+def check_ollama():
+    Colors.step("Checking Ollama Connection")
+    try:
+        # Just check the tag endpoint to see if it responds
+        req = Request(f"{OLLAMA_URL}/api/tags")
+        with urlopen(req, timeout=2) as response:
+            if response.status == 200:
+                Colors.success("Ollama is running and accessible.")
+                return True
+            else:
+                Colors.warning(f"Ollama responded with status code: {response.status}")
+                return False
+    except (URLError, HTTPError, ConnectionRefusedError):
+        Colors.warning("Ollama is NOT running or not accessible at localhost:11434.")
+        Colors.print("  Note: The system requires Ollama to function correctly.", Colors.WARNING)
+        return False
+    except Exception as e:
+        Colors.warning(f"Error checking Ollama: {e}")
+        return False
 
 def get_venv_python():
     if IS_WINDOWS:
@@ -32,142 +117,188 @@ def get_venv_pip():
         return os.path.join(VENV_DIR, "bin", "pip")
 
 def setup_backend():
-    print_step("Setting up Backend")
+    Colors.step("Setting up Backend")
 
-    # Check if venv exists
     if not os.path.exists(VENV_DIR):
-        print(f"Creating virtual environment in {VENV_DIR}...")
+        Colors.print("Creating virtual environment...", Colors.OKBLUE)
         try:
             subprocess.check_call([sys.executable, "-m", "venv", ".venv"])
+            Colors.success("Virtual environment created.")
         except subprocess.CalledProcessError:
-            print("Error: Failed to create virtual environment. Ensure 'python3-venv' is installed if on Linux.")
+            Colors.error("Failed to create virtual environment.")
             sys.exit(1)
     else:
-        print("Virtual environment already exists.")
+        Colors.print("Virtual environment exists.", Colors.OKGREEN)
 
-    # Install dependencies
     pip_exe = get_venv_pip()
     req_file = os.path.join(BACKEND_DIR, "requirements.txt")
+
     if os.path.exists(req_file):
-        print("Installing backend dependencies...")
+        Colors.print("Checking backend dependencies...", Colors.OKBLUE)
         try:
-            subprocess.check_call([pip_exe, "install", "--upgrade", "pip"], stdout=subprocess.DEVNULL)
-            subprocess.check_call([pip_exe, "install", "-r", req_file])
+            subprocess.check_call([pip_exe, "install", "-r", req_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            Colors.success("Backend dependencies installed.")
         except subprocess.CalledProcessError as e:
-            print(f"Error installing dependencies: {e}")
+            Colors.error(f"Error installing dependencies: {e}")
             sys.exit(1)
     else:
-        print("Warning: requirements.txt not found.")
+        Colors.warning("requirements.txt not found.")
 
 def setup_frontend():
-    print_step("Setting up Frontend")
+    Colors.step("Setting up Frontend")
 
     if not os.path.exists(FRONTEND_DIR):
-        print(f"Error: Frontend directory '{FRONTEND_DIR}' not found.")
+        Colors.error(f"Frontend directory '{FRONTEND_DIR}' not found.")
         return
 
-    # Check for npm
-    # On Windows, shutil.which might not find npm if it's a cmd file unless checking npm.cmd
-    npm_path = shutil.which("npm") or shutil.which("npm.cmd")
-    if not npm_path:
-         print("Error: 'npm' not found. Please install Node.js.")
-         sys.exit(1)
-
     npm_cmd = "npm.cmd" if IS_WINDOWS else "npm"
+
+    # Check if npm is installed
+    if not shutil.which(npm_cmd) and not shutil.which("npm"):
+        Colors.error("npm is not found. Please install Node.js.")
+        sys.exit(1)
 
     node_modules = os.path.join(FRONTEND_DIR, "node_modules")
     if not os.path.exists(node_modules):
-        print("Installing frontend dependencies (this may take a while)...")
+        Colors.print("Installing frontend dependencies (this may take a while)...", Colors.OKBLUE)
         try:
-            # shell=IS_WINDOWS is important for npm on windows
             subprocess.check_call([npm_cmd, "install"], cwd=FRONTEND_DIR, shell=IS_WINDOWS)
+            Colors.success("Frontend dependencies installed.")
         except subprocess.CalledProcessError as e:
-            print(f"Error installing frontend dependencies: {e}")
+            Colors.error(f"Error installing frontend dependencies: {e}")
             sys.exit(1)
     else:
-        print("Frontend dependencies seem to be installed.")
+        Colors.print("Frontend dependencies seem to be installed.", Colors.OKGREEN)
 
-processes = []
+def start_services(args):
+    processes = []
 
-def cleanup():
-    if not processes:
-        return
-    print("\nStopping services...")
-    for p in processes:
-        if p.poll() is None: # If still running
-            try:
-                # Terminate properly
-                p.terminate()
-                try:
-                    p.wait(timeout=3)
-                except subprocess.TimeoutExpired:
-                    print(f"Force killing process {p.pid}...")
-                    p.kill()
-            except Exception as e:
-                print(f"Error stopping process: {e}")
-    print("Stopped.")
+    # Define ports
+    backend_port = args.port_backend
+    frontend_port = args.port_frontend
+    host = args.host
 
-def signal_handler(sig, frame):
-    cleanup()
-    sys.exit(0)
+    # Check ports availability
+    if not args.backend_only and check_port(host, frontend_port):
+        Colors.warning(f"Port {frontend_port} is already in use. Frontend might fail to start.")
 
-def start_services():
-    print_step("Starting Services")
+    if not args.frontend_only and check_port(host, backend_port):
+        Colors.warning(f"Port {backend_port} is already in use. Backend might fail to start.")
 
-    # 1. Start Backend
-    print("Launching Backend...")
-    python_exe = get_venv_python()
-    # Using python -m uvicorn allows uvicorn to be found in the venv
-    backend_cmd = [python_exe, "-m", "uvicorn", "server:app", "--reload", "--host", "127.0.0.1", "--port", "8000"]
+    # Start Backend
+    if not args.frontend_only:
+        Colors.step("Launching Backend")
+        python_exe = get_venv_python()
+        backend_cmd = [python_exe, "-m", "uvicorn", "server:app", "--reload", "--host", host, "--port", str(backend_port)]
 
-    backend_proc = subprocess.Popen(backend_cmd, cwd=BACKEND_DIR)
-    processes.append(backend_proc)
+        try:
+            backend_proc = subprocess.Popen(backend_cmd, cwd=BACKEND_DIR)
+            processes.append(backend_proc)
+            Colors.success(f"Backend started on http://{host}:{backend_port}")
+        except Exception as e:
+            Colors.error(f"Failed to start backend: {e}")
 
-    # Give backend a moment to initialize? Not strictly necessary but nice.
-    time.sleep(1)
+    # Start Frontend
+    if not args.backend_only:
+        Colors.step("Launching Frontend")
+        npm_cmd = "npm.cmd" if IS_WINDOWS else "npm"
 
-    # 2. Start Frontend
-    print("Launching Frontend...")
-    npm_cmd = "npm.cmd" if IS_WINDOWS else "npm"
-    frontend_cmd = [npm_cmd, "start"]
+        env = os.environ.copy()
+        env["PORT"] = str(frontend_port)
+        # BROWSER=none prevents CRA from opening browser immediately, we handle it manually
+        env["BROWSER"] = "none"
 
-    # Run npm start
-    frontend_proc = subprocess.Popen(frontend_cmd, cwd=FRONTEND_DIR, shell=IS_WINDOWS)
-    processes.append(frontend_proc)
+        frontend_cmd = [npm_cmd, "start"]
 
-    print("\nAll systems go! Press Ctrl+C to stop.\n")
+        try:
+            # We want to pipe stdout to devnull to reduce noise, but stderr is useful.
+            # Or maybe just let it stream. The user might want to see webpack output.
+            # Let's keep it visible.
+            frontend_proc = subprocess.Popen(frontend_cmd, cwd=FRONTEND_DIR, env=env, shell=IS_WINDOWS)
+            processes.append(frontend_proc)
+            Colors.success(f"Frontend started on http://localhost:{frontend_port}")
+        except Exception as e:
+            Colors.error(f"Failed to start frontend: {e}")
+
+    # Open Browser
+    if not args.no_browser and not args.backend_only:
+        Colors.step("Opening Browser")
+        def open_browser_task():
+            # Wait for frontend to be ready
+            Colors.print("Waiting for frontend to be ready...", Colors.OKBLUE)
+            if wait_for_port("localhost", frontend_port, timeout=60):
+                url = f"http://localhost:{frontend_port}"
+                Colors.print(f"Opening {url} ...", Colors.OKGREEN)
+                webbrowser.open(url)
+            else:
+                Colors.warning("Timed out waiting for frontend port.")
+
+        thread = threading.Thread(target=open_browser_task)
+        thread.daemon = True
+        thread.start()
+
+    Colors.print("\n" + "="*50, Colors.OKCYAN)
+    Colors.print(" NEXUS IS RUNNING", Colors.OKCYAN, bold=True)
+    Colors.print(" Press Ctrl+C to stop all services.", Colors.OKCYAN)
+    Colors.print("="*50 + "\n", Colors.OKCYAN)
 
     try:
         while True:
             time.sleep(1)
-            if backend_proc.poll() is not None:
-                print("Backend exited unexpectedly.")
-                break
-            if frontend_proc.poll() is not None:
-                print("Frontend exited unexpectedly.")
-                break
+            # Check if processes are alive
+            for p in processes:
+                if p.poll() is not None:
+                    Colors.error("A service has exited unexpectedly.")
+                    raise KeyboardInterrupt # Trigger cleanup
     except KeyboardInterrupt:
-        pass # cleanup called in finally
+        Colors.print("\nStopping services...", Colors.WARNING)
     finally:
-        cleanup()
+        for p in processes:
+            if p.poll() is None:
+                p.terminate()
+                try:
+                    p.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+        Colors.print("All services stopped.", Colors.OKGREEN)
 
 def main():
-    # Handle arguments
-    if len(sys.argv) > 1 and sys.argv[1] == "--setup-only":
-        setup_backend()
-        setup_frontend()
-        print("Setup complete.")
+    parser = argparse.ArgumentParser(description="NEXUS Start Script")
+    parser.add_argument("--skip-setup", action="store_true", help="Skip dependency installation checks")
+    parser.add_argument("--backend-only", action="store_true", help="Run only the backend")
+    parser.add_argument("--frontend-only", action="store_true", help="Run only the frontend")
+    parser.add_argument("--setup-only", action="store_true", help="Run setup steps and exit")
+    parser.add_argument("--check-brain", action="store_true", help="Run the deep diagnostic tool check_brain.py")
+    parser.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically")
+    parser.add_argument("--port-backend", type=int, default=8000, help="Port for the backend (default: 8000)")
+    parser.add_argument("--port-frontend", type=int, default=3000, help="Port for the frontend (default: 3000)")
+    parser.add_argument("--host", default="127.0.0.1", help="Host for the backend (default: 127.0.0.1)")
+
+    args = parser.parse_args()
+
+    print_banner()
+
+    if args.check_brain:
+        Colors.step("Running Brain Diagnostics")
+        subprocess.call([sys.executable, "check_brain.py"])
         return
 
-    setup_backend()
-    setup_frontend()
+    # Pre-flight checks
+    if not args.skip_setup:
+        # Check Ollama
+        check_ollama()
 
-    # Set up signal handling
-    signal.signal(signal.SIGINT, signal_handler)
-    if not IS_WINDOWS:
-        signal.signal(signal.SIGTERM, signal_handler)
+        if not args.frontend_only:
+            setup_backend()
 
-    start_services()
+        if not args.backend_only:
+            setup_frontend()
+
+    if args.setup_only:
+        Colors.success("Setup complete.")
+        return
+
+    start_services(args)
 
 if __name__ == "__main__":
     main()
