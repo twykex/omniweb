@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import OLLAMA_BASE
 from models import ExpandRequest, AnalysisRequest, RandomTopicRequest
-from utils import robust_json_parser, get_gpu_vram, get_available_models_list
+from utils import robust_json_parser, get_gpu_vram, get_available_models_list, filter_children_response
 
 app = FastAPI()
 
@@ -21,7 +21,7 @@ app.add_middleware(
 def get_models():
     vram = get_gpu_vram()
     try:
-        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
+        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=5)
         if res.status_code == 200:
             data = res.json()
             models_list = []
@@ -134,38 +134,7 @@ def expand_node(req: ExpandRequest):
 
     data = call_llm(req.model, system_prompt)
 
-    def filter_response(data, recent_nodes):
-        if not data or not isinstance(data, dict) or "children" not in data or not data["children"]:
-            return None
-
-        # Check for Forbidden Topics and Duplicates
-        lower_recent = {n.lower() for n in recent_nodes} if recent_nodes else set()
-        seen_names = set()
-        valid_children = []
-
-        for child in data["children"]:
-            name = child.get("name", "")
-            if not name:
-                continue
-            name_lower = name.lower()
-
-            if name_lower in lower_recent:
-                print(f"Found forbidden topic: {name}")
-                continue
-            if name_lower in seen_names:
-                print(f"Found duplicate topic in response: {name}")
-                continue
-
-            seen_names.add(name_lower)
-            valid_children.append(child)
-
-        if not valid_children:
-            return None
-
-        data["children"] = valid_children
-        return data
-
-    data = filter_response(data, req.recent_nodes)
+    data = filter_children_response(data, req.recent_nodes)
     if data:
         return data
 
@@ -178,7 +147,7 @@ def expand_node(req: ExpandRequest):
     for fallback_model in fallback_candidates:
         print(f"🔄 Switching to fallback model: {fallback_model}")
         data = call_llm(fallback_model, system_prompt)
-        data = filter_response(data, req.recent_nodes)
+        data = filter_children_response(data, req.recent_nodes)
         if data:
             return data
 
