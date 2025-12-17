@@ -553,6 +553,57 @@ const GlobalCSS = () => (
     .timer-fill { height: 100%; background: #34d399; transition: width 1s linear; }
     .timer-fill.danger { background: #f87171; }
     .timer-text { font-size: 12px; font-weight: 700; color: var(--text-muted); width: 30px; text-align: right; }
+
+    /* NEW UI ELEMENTS */
+    .icon-btn {
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
+        color: var(--text-muted); padding: 8px 12px; border-radius: 8px;
+        cursor: pointer; transition: 0.2s;
+    }
+    .icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+    .search-btn {
+        width: 50px; height: 50px; border-radius: 50%; border: none;
+        background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: 0.2s; box-shadow: 0 0 15px var(--primary-glow); margin-left: 10px;
+    }
+    .search-btn:hover { transform: scale(1.1); box-shadow: 0 0 25px var(--primary-glow); }
+    .search-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .chip-btn {
+        background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
+        padding: 8px 16px; border-radius: 20px; color: var(--text-muted);
+        cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif;
+        font-size: 12px; font-weight: 500; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;
+    }
+    .chip-btn:hover {
+        background: rgba(167, 139, 250, 0.15); color: #fff; border-color: rgba(167, 139, 250, 0.4);
+        transform: translateY(-2px);
+    }
+
+    .tab-btn {
+        background: none; border: none; padding: 12px 16px; color: var(--text-muted);
+        font-size: 11px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; letter-spacing: 1px;
+        transition: 0.2s; display: flex; align-items: center; gap: 8px; white-space: nowrap;
+    }
+    .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.02); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: rgba(167, 139, 250, 0.05); }
+
+    .home-btn {
+        display: flex; align-items: center; justify-content: center;
+        width: 36px; height: 36px; border-radius: 8px;
+        color: var(--text-muted); transition: 0.2s;
+        cursor: pointer;
+    }
+    .home-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+
+    .start-icon {
+        transition: transform 0.2s;
+    }
+    .search-btn:hover .start-icon {
+        transform: translateX(2px);
+    }
   `}</style>
 );
 

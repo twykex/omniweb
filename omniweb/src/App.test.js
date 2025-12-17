@@ -77,7 +77,7 @@ describe('App Integration', () => {
     fireEvent.change(input, { target: { value: 'Quantum Physics' } });
 
     // Click start button (using the arrow button)
-    const startBtn = screen.getByText('➜');
+    const startBtn = screen.getByLabelText('Start Learning');
     fireEvent.click(startBtn);
 
     // Verify workspace elements appear

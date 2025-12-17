@@ -8,10 +8,25 @@ import NodeCard from "./NodeCard";
 import SkeletonColumn from "./SkeletonColumn";
 import { QuizInterface, QuizConfig } from "./QuizInterface";
 import DiagramWidget from "./DiagramWidget";
+import Icons from "./Icons";
 import { BASE_URL } from "../constants";
 import { processAutoDiagrams } from "../helpers";
 
 const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
+  const modeIcons = {
+      explain: Icons.Explain,
+      history: Icons.History,
+      impact: Icons.Impact,
+      eli5: Icons.ELI5,
+      future: Icons.Future,
+      code: Icons.Code,
+      proscons: Icons.ProsCons,
+      debate: Icons.Debate,
+      glossary: Icons.Glossary,
+      sources: Icons.Sources,
+      quiz: Icons.Quiz
+  };
+
   const [columns, setColumns] = useState([{
     id: "root",
     selectedNode: null,
@@ -275,7 +290,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
              )
           ))}
         </div>
-        <button className="exit-icon-btn" onClick={onExit} title="Exit">✕</button>
+        <button className="exit-icon-btn" onClick={onExit} title="Exit"><Icons.X /></button>
       </header>
 
       <div className="miller-columns-container" ref={scrollRef}>
@@ -340,15 +355,19 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 </div>
 
                 <div className="panel-tabs">
-                    {['explain', 'history', 'impact', 'eli5', 'future', 'code', 'proscons', 'debate', 'glossary', 'sources', 'quiz'].map(m => (
-                        <button
-                            key={m}
-                            className={lessonData.mode === m ? 'active' : ''}
-                            onClick={() => openLesson(analyzingNode, m)}
-                        >
-                            {m.toUpperCase()}
-                        </button>
-                    ))}
+                    {['explain', 'history', 'impact', 'eli5', 'future', 'code', 'proscons', 'debate', 'glossary', 'sources', 'quiz'].map(m => {
+                        const Icon = modeIcons[m];
+                        return (
+                            <button
+                                key={m}
+                                className={`tab-btn ${lessonData.mode === m ? 'active' : ''}`}
+                                onClick={() => openLesson(analyzingNode, m)}
+                            >
+                                {Icon && <Icon />}
+                                {m.toUpperCase()}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 <div className="panel-content custom-scroll">
@@ -387,11 +406,11 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 </div>
 
                 <div className="panel-footer">
-                    <button onClick={() => {
+                    <button className="icon-btn" onClick={() => {
                         navigator.clipboard.writeText(lessonData.content);
                         addToast("Lesson text copied to clipboard", "success");
-                    }}>COPY TEXT</button>
-                    <button onClick={() => {
+                    }}><Icons.Copy /> COPY</button>
+                    <button className="icon-btn" onClick={() => {
                         const blob = new Blob([lessonData.content], { type: "text/plain" });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");
@@ -400,8 +419,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         a.click();
                         URL.revokeObjectURL(url);
                         addToast("Lesson saved to file", "success");
-                    }}>SAVE FILE</button>
-                    <button onClick={closeLesson}>CLOSE</button>
+                    }}><Icons.Download /> SAVE</button>
+                    <button className="icon-btn" onClick={closeLesson}><Icons.X /> CLOSE</button>
                 </div>
             </motion.div>
           </>

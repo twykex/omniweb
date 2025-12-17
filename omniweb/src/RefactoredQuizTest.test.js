@@ -103,7 +103,7 @@ describe('Refactored Quiz Features', () => {
         fireEvent.change(input, { target: { value: 'Test' } });
 
         await act(async () => {
-             fireEvent.click(screen.getByText('➜'));
+             fireEvent.click(screen.getByLabelText('Start Learning'));
         });
 
         await waitFor(() => expect(screen.getAllByText('Test').length).toBeGreaterThan(0));

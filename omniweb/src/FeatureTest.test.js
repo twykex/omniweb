@@ -110,7 +110,7 @@ describe('OmniWeb Feature Tests', () => {
     const input = screen.getByPlaceholderText(/What do you want to learn today/i);
     fireEvent.change(input, { target: { value: 'Artificial Intelligence' } });
 
-    const startBtn = screen.getByText('➜');
+    const startBtn = screen.getByLabelText('Start Learning');
     fireEvent.click(startBtn);
 
     // Verify workspace
@@ -163,7 +163,7 @@ describe('OmniWeb Feature Tests', () => {
       },
     });
 
-    const copyBtn = screen.getByText('COPY TEXT');
+    const copyBtn = screen.getByRole('button', { name: /copy/i });
     fireEvent.click(copyBtn);
 
     expect(writeTextMock).toHaveBeenCalled();
@@ -172,7 +172,7 @@ describe('OmniWeb Feature Tests', () => {
     expect(screen.getByText('Lesson text copied to clipboard')).toBeInTheDocument();
 
     // 6. Close Lesson
-    const closeBtn = screen.getByText('CLOSE');
+    const closeBtn = screen.getByRole('button', { name: /close/i });
     fireEvent.click(closeBtn);
 
     await waitFor(() => {
@@ -194,7 +194,7 @@ describe('OmniWeb Feature Tests', () => {
     // Start
     const input = screen.getByPlaceholderText(/What do you want to learn today/i);
     fireEvent.change(input, { target: { value: 'Empty Topic' } });
-    fireEvent.click(screen.getByText('➜'));
+    fireEvent.click(screen.getByLabelText('Start Learning'));
 
     // Wait for workspace and toast
     await waitFor(() => {

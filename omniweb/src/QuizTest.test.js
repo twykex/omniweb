@@ -91,7 +91,7 @@ describe('Quiz Integration', () => {
         // Start
         const input = await screen.findByPlaceholderText(/What do you want to learn today/i);
         fireEvent.change(input, { target: { value: 'Math' } });
-        fireEvent.click(screen.getByText('➜'));
+        fireEvent.click(screen.getByLabelText('Start Learning'));
 
         // Wait for workspace
         await waitFor(() => expect(screen.getAllByText('Math').length).toBeGreaterThan(0));

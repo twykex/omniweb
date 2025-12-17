@@ -58,7 +58,7 @@ describe('Regeneration Logic', () => {
     // 1. Start App
     const input = await screen.findByPlaceholderText(/What do you want to learn/i);
     fireEvent.change(input, { target: { value: 'Start' } });
-    fireEvent.click(screen.getByText('➜'));
+    fireEvent.click(screen.getByLabelText('Start Learning'));
 
     // Wait for Level 1
     await screen.findByText('LEVEL 1');

@@ -80,7 +80,7 @@ describe('Auto Generate Level 2', () => {
     fireEvent.change(input, { target: { value: 'Space Exploration' } });
 
     // Start
-    const startBtn = screen.getByText('➜');
+    const startBtn = screen.getByLabelText('Start Learning');
     fireEvent.click(startBtn);
 
     // Verify Level 1 appears
