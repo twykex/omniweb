@@ -1,55 +1,64 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import App from './App';
 import React from 'react';
+import App from './App';
 
-// Mock fetch
-global.fetch = jest.fn();
+// --- MOCKS ---
 
-// Mock framer-motion to avoid animation issues in tests
+// Mock Axios (used in Main branch logic)
+jest.mock('axios', () => ({
+  get: jest.fn(() => Promise.resolve({ data: { models: [{ name: 'llama3', fits: true }] } })),
+  post: jest.fn(),
+}));
+
+// Mock Global Fetch (used in Redesign branch logic fallback or specific components)
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({ models: [{ name: 'llama3', fits: true }] }),
+  })
+);
+
+// Mock Framer Motion to avoid animation timeouts/errors in tests
 jest.mock('framer-motion', () => ({
   motion: {
     div: ({ children, ...props }) => <div {...props}>{children}</div>,
+    h1: ({ children, ...props }) => <h1 {...props}>{children}</h1>,
+    p: ({ children, ...props }) => <p {...props}>{children}</p>,
   },
   AnimatePresence: ({ children }) => <>{children}</>,
 }));
 
-// Mock react-markdown
-jest.mock('react-markdown', () => ({ children }) => <div data-testid="markdown">{children}</div>);
+// Mock React Markdown
+jest.mock('react-markdown', () => ({
+  __esModule: true,
+  default: ({ children }) => <div data-testid="markdown">{children}</div>,
+}));
+
+// --- TESTS ---
 
 describe('App Integration', () => {
   beforeEach(() => {
-    fetch.mockClear();
+    jest.clearAllMocks();
   });
 
   test('renders landing page initially', async () => {
-    // Mock successful models response
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ models: ['llama3', 'gpt-4'] }),
-    });
-
     render(<App />);
 
     // Check for hero title
     expect(await screen.findByText(/Omni/i)).toBeInTheDocument();
     expect(screen.getByText(/The Infinite Learning Engine/i)).toBeInTheDocument();
 
-    // Check for search input
+    // Check for search input (Updated placeholder from Redesign branch)
     expect(screen.getByPlaceholderText(/What do you want to learn today/i)).toBeInTheDocument();
 
-    // Check for feature cards
+    // Check for feature cards (from Redesign branch)
     expect(screen.getByText(/Infinite Recursion/i)).toBeInTheDocument();
   });
 
   test('transitions to workspace on start', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ models: ['llama3'] }),
-    });
-
     render(<App />);
 
-    // Wait for models to load
+    // Wait for models to load and input to appear
     const input = await screen.findByPlaceholderText(/What do you want to learn today/i);
 
     // Type in a topic
@@ -64,5 +73,17 @@ describe('App Integration', () => {
 
     // Verify the initial node is present
     expect(screen.getByText('Quantum Physics')).toBeInTheDocument();
+  });
+
+  test('shows backend offline message when API fails', async () => {
+    // Override the default mock for this specific test
+    const axios = require('axios');
+    axios.get.mockRejectedValueOnce(new Error("Backend Offline"));
+
+    render(<App />);
+    
+    // We expect the error state from the main branch logic
+    const errorMsg = await screen.findByText(/Backend Offline/i);
+    expect(errorMsg).toBeInTheDocument();
   });
 });
