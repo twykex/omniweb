@@ -10,6 +10,7 @@ const App = () => {
   const [availableModels, setAvailableModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState("");
   const [loadingModels, setLoadingModels] = useState(true);
+  const [backendError, setBackendError] = useState(false);
   const [startTopic, setStartTopic] = useState("");
   const [toasts, setToasts] = useState([]);
 
@@ -19,21 +20,27 @@ const App = () => {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   };
 
+  const fetchModels = async () => {
+    setLoadingModels(true);
+    setBackendError(false);
+    try {
+      const res = await axios.get(`${BASE_URL}/models`);
+      const models = res.data.models || [];
+      setAvailableModels(models);
+
+      const smartModel = models.find(m =>
+          (m.name.includes("llama3") || m.name.includes("mistral") || m.name.includes("gpt")) && m.fits
+      ) || models.find(m => m.fits) || models[0];
+
+      setSelectedModel(smartModel ? smartModel.name : "");
+    } catch (err) {
+      console.error("Backend Offline");
+      setBackendError(true);
+    }
+    finally { setLoadingModels(false); }
+  };
+
   useEffect(() => {
-    const fetchModels = async () => {
-      try {
-        const res = await axios.get(`${BASE_URL}/models`);
-        const models = res.data.models || [];
-        setAvailableModels(models);
-
-        const smartModel = models.find(m =>
-            (m.name.includes("llama3") || m.name.includes("mistral") || m.name.includes("gpt")) && m.fits
-        ) || models.find(m => m.fits) || models[0];
-
-        setSelectedModel(smartModel ? smartModel.name : "");
-      } catch (err) { console.error("Backend Offline"); }
-      finally { setLoadingModels(false); }
-    };
     fetchModels();
   }, []);
 
@@ -52,6 +59,8 @@ const App = () => {
             setStartTopic={setStartTopic}
             onStart={() => { if(startTopic.trim()) setHasStarted(true); }}
             isLoading={loadingModels}
+            backendError={backendError}
+            onRetry={fetchModels}
           />
         ) : (
           <LearningWorkspace
@@ -531,7 +540,7 @@ const ModelSelector = ({ models, selected, onSelect }) => {
   );
 };
 
-const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic }) => (
+const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic, backendError, onRetry }) => (
   <motion.div
     className="landing-container"
     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -562,8 +571,9 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
             placeholder="Search any topic (e.g., Black Holes, Jazz)..."
             onKeyDown={(e) => e.key === 'Enter' && startTopic.trim() && onStart()}
             autoFocus
+            disabled={backendError}
         />
-        <button onClick={onStart} disabled={isLoading || !startTopic.trim()} className="go-btn">
+        <button onClick={onStart} disabled={isLoading || backendError || !startTopic.trim()} className="go-btn">
              ➜
         </button>
       </motion.div>
@@ -574,6 +584,12 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
       >
          {isLoading ? (
              <span className="status-connecting">INITIALIZING SYSTEM...</span>
+         ) : backendError ? (
+             <div className="error-state">
+               <span className="error-msg">⚠️ Backend Offline</span>
+               <button onClick={onRetry} className="retry-btn">RETRY CONNECTION</button>
+               <div className="error-hint">Ensure <code>server.py</code> and <code>Ollama</code> are running.</div>
+             </div>
          ) : (
              <ModelSelector models={models} selected={selected} onSelect={onSelect} />
          )}
@@ -599,6 +615,12 @@ const GlobalCSS = () => (
     }
 
     body { margin: 0; background: var(--bg-dark); color: var(--text); font-family: 'Inter', sans-serif; overflow: hidden; }
+
+    /* ACCESSIBILITY */
+    *:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+    }
 
     /* BACKGROUND ENGINE */
     .bg-engine { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: #050507; }
@@ -636,8 +658,20 @@ const GlobalCSS = () => (
     .go-btn { width: 54px; height: 54px; border-radius: 50%; border: none; background: #fff; color: #000; font-size: 20px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
     .go-btn:hover { transform: scale(1.05); background: #e0e7ff; }
 
-    .landing-footer { margin-top: 40px; }
+    .landing-footer { margin-top: 40px; min-height: 50px; }
     .dot.online { width: 6px; height: 6px; background: #34d399; border-radius: 50%; box-shadow: 0 0 8px #34d399; }
+
+    .error-state { display: flex; flex-direction: column; align-items: center; gap: 12px; animation: fadeIn 0.5s ease; }
+    .error-msg { color: #f87171; font-weight: 600; font-size: 14px; letter-spacing: 0.5px; }
+    .retry-btn {
+        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+        color: #fff; padding: 8px 16px; border-radius: 6px; cursor: pointer;
+        font-size: 11px; font-weight: 600; transition: 0.2s;
+    }
+    .retry-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+    .error-hint { font-size: 11px; color: var(--text-muted); opacity: 0.7; }
+    .error-hint code { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
     /* MODEL SELECTOR */
     .model-selector-container { position: relative; width: 280px; text-align: left; margin: 0 auto; }
