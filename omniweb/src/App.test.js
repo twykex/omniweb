@@ -17,14 +17,25 @@ global.fetch = jest.fn(() =>
 );
 
 // Mock Framer Motion to avoid animation timeouts/errors in tests
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }) => <div {...props}>{children}</div>,
-    h1: ({ children, ...props }) => <h1 {...props}>{children}</h1>,
-    p: ({ children, ...props }) => <p {...props}>{children}</p>,
-  },
-  AnimatePresence: ({ children }) => <>{children}</>,
-}));
+jest.mock('framer-motion', () => {
+  const filterProps = (props) => {
+    const {
+      initial, animate, exit, variants, transition, layout, layoutId,
+      onHoverStart, onHoverEnd, onTap, whileHover, whileTap,
+      ...validProps
+    } = props;
+    return validProps;
+  };
+
+  return {
+    motion: {
+      div: ({ children, ...props }) => <div {...filterProps(props)}>{children}</div>,
+      h1: ({ children, ...props }) => <h1 {...filterProps(props)}>{children}</h1>,
+      p: ({ children, ...props }) => <p {...filterProps(props)}>{children}</p>,
+    },
+    AnimatePresence: ({ children }) => <>{children}</>,
+  };
+});
 
 // Mock React Markdown
 jest.mock('react-markdown', () => ({
@@ -82,10 +93,16 @@ describe('App Integration', () => {
     // Override the default mock for this specific test
     axios.get.mockRejectedValueOnce(new Error("Backend Offline"));
 
-    render(<App />);
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      render(<App />);
     
-    // We expect the error state from the main branch logic
-    const errorMsg = await screen.findByText(/Backend Offline/i);
-    expect(errorMsg).toBeInTheDocument();
+      // We expect the error state from the main branch logic
+      const errorMsg = await screen.findByText(/Backend Offline/i);
+      expect(errorMsg).toBeInTheDocument();
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 });
