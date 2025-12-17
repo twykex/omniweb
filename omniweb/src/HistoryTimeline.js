@@ -75,7 +75,7 @@ export const HistoryTimeline = ({ jsonString }) => {
             }
 
             // Normalize structure
-            parsedEvents = parsedEvents.map(e => ({
+            parsedEvents = parsedEvents.filter(e => e).map(e => ({
                 year: e.year || "Unknown",
                 title: e.title || "Untitled Event",
                 description: e.description || "No description available."

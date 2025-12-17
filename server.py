@@ -108,9 +108,12 @@ def robust_json_parser(text):
     # Fallback to simple extraction if robust parsing fails
     # This might return invalid JSON if multiple objects exist, but it's a best effort
     if start != -1:
-        end_obj = text.rfind('}') + 1
-        end_arr = text.rfind(']') + 1
-        end = max(end_obj, end_arr)
+        if text[start] == '{':
+            end = text.rfind('}') + 1
+        elif text[start] == '[':
+            end = text.rfind(']') + 1
+        else:
+            end = 0
 
         if end > start:
             return text[start:end]
@@ -195,6 +198,10 @@ def get_models():
 @app.post("/expand")
 def expand_node(req: ExpandRequest):
     print(f"\n⚡ Expanding Topic: [{req.node}]")
+
+    if not req.model:
+        print("⚠️ No model selected.")
+        return {"children": []}
 
     context_parts = req.context.split(" > ")
     short_context = " > ".join(context_parts[-4:])
@@ -318,7 +325,7 @@ def analyze_node(req: AnalysisRequest):
         Difficulty Guidance: {difficulty_guidance}
 
         Style: Engaging, Professor-like, Clear.
-        Format: JSON only. Do not use Markdown code blocks.
+        Format: JSON Object only. Do not use Markdown code blocks.
         """
     else:
         system_prompt = f"""

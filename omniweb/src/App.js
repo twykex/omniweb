@@ -18,7 +18,16 @@ const processAutoDiagrams = (text) => {
   return text.replace(regex, (match, query) => {
     // We append specific keywords to ensure the AI generator creates a diagram style image
     const prompt = encodeURIComponent(`educational scientific diagram schematic white on black background: ${query}`);
-    const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=450&nologo=true&seed=${query.length}`;
+
+    // Simple hash for seed
+    let hash = 0;
+    for (let i = 0; i < query.length; i++) {
+        hash = ((hash << 5) - hash) + query.charCodeAt(i);
+        hash |= 0;
+    }
+    const seed = Math.abs(hash);
+
+    const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=450&nologo=true&seed=${seed}`;
     return `\n\n![${query}](${url})\n\n`;
   });
 };
@@ -808,7 +817,7 @@ const QuizInterface = ({ content, quizConfig, onNewQuiz }) => {
       handleOptionClick(-1); // Timeout
     }
     return () => clearInterval(interval);
-  }, [timerActive, timeLeft, showResult, quizFinished]);
+  }, [timerActive, timeLeft, showResult, quizFinished, handleOptionClick]);
 
   // Start timer when question changes
   useEffect(() => {
