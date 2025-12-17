@@ -59,6 +59,23 @@ const App = () => {
     finally { setLoadingModels(false); }
   };
 
+  const handleSurprise = async () => {
+    if (!selectedModel) return;
+    setLoadingModels(true);
+    try {
+        const res = await axios.post(`${BASE_URL}/random`, { model: selectedModel });
+        if (res.data.topic) {
+            setStartTopic(res.data.topic);
+            setHasStarted(true);
+        }
+    } catch (err) {
+        console.error(err);
+        addToast("Failed to generate random topic", "error");
+    } finally {
+        setLoadingModels(false);
+    }
+  };
+
   useEffect(() => {
     fetchModels();
   }, []);
@@ -77,6 +94,7 @@ const App = () => {
             startTopic={startTopic}
             setStartTopic={setStartTopic}
             onStart={() => { if(startTopic.trim()) setHasStarted(true); }}
+            onSurprise={handleSurprise}
             isLoading={loadingModels}
             backendError={backendError}
             onRetry={fetchModels}
@@ -424,7 +442,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 </div>
 
                 <div className="panel-tabs">
-                    {['explain', 'history', 'impact', 'eli5', 'quiz'].map(m => (
+                    {['explain', 'history', 'impact', 'eli5', 'future', 'code', 'proscons', 'debate', 'quiz'].map(m => (
                         <button 
                             key={m} 
                             className={lessonData.mode === m ? 'active' : ''}
@@ -589,6 +607,10 @@ const NodeCard = ({ node, isActive, onClick, onAction }) => {
             <ActionButton icon={<Icons.History />} label="History" onClick={() => onAction('history')} />
             <ActionButton icon={<Icons.Impact />} label="Impact" onClick={() => onAction('impact')} />
             <ActionButton icon={<Icons.ELI5 />} label="ELI5" onClick={() => onAction('eli5')} />
+            <ActionButton icon={<Icons.Future />} label="Future" onClick={() => onAction('future')} />
+            <ActionButton icon={<Icons.Code />} label="Code" onClick={() => onAction('code')} />
+            <ActionButton icon={<Icons.ProsCons />} label="Pros/Cons" onClick={() => onAction('proscons')} />
+            <ActionButton icon={<Icons.Debate />} label="Debate" onClick={() => onAction('debate')} />
             <ActionButton icon={<Icons.Quiz />} label="Quiz" onClick={() => onAction('quiz')} />
           </motion.div>
         )}
@@ -630,6 +652,30 @@ const Icons = {
       <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
       <line x1="9" y1="9" x2="9.01" y2="9"></line>
       <line x1="15" y1="9" x2="15.01" y2="9"></line>
+    </svg>
+  ),
+  Future: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+    </svg>
+  ),
+  Code: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6"></polyline>
+      <polyline points="8 6 2 12 8 18"></polyline>
+    </svg>
+  ),
+  ProsCons: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20v-8m0 0V4m0 8h8m-8 0H4"></path>
+    </svg>
+  ),
+  Debate: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+      <circle cx="9" cy="7" r="4"></circle>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
     </svg>
   ),
   Quiz: () => (
@@ -1016,7 +1062,7 @@ const ModelSelector = ({ models, selected, onSelect }) => {
   );
 };
 
-const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic, backendError, onRetry }) => {
+const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic, backendError, onRetry, onSurprise }) => {
   const inputRef = useRef(null);
 
   return (
@@ -1054,6 +1100,19 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
           <button onClick={onStart} disabled={isLoading || backendError || !startTopic.trim()} className="go-btn">
                 ➜
           </button>
+        </motion.div>
+
+        <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+            style={{ marginBottom: 20 }}
+        >
+            <button
+                onClick={onSurprise}
+                className="surprise-btn"
+                disabled={isLoading || backendError}
+            >
+                🎲 SURPRISE ME
+            </button>
         </motion.div>
 
         {/* Re-integrated Suggested Topics from Main */}
@@ -1292,6 +1351,15 @@ const GlobalCSS = () => (
     .error-hint { font-size: 11px; color: var(--text-muted); opacity: 0.7; }
     .error-hint code { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .surprise-btn {
+        background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted);
+        padding: 10px 24px; border-radius: 50px; cursor: pointer; font-size: 12px; font-weight: 600;
+        letter-spacing: 1px; transition: 0.2s;
+    }
+    .surprise-btn:hover {
+        background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.2);
+    }
 
     /* MODEL SELECTOR */
     .model-selector-container { position: relative; width: 280px; text-align: left; margin: 0 auto; }
