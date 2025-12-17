@@ -238,7 +238,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
       }
   };
 
-  const readingTime = lessonData && lessonData.content ? Math.ceil(lessonData.content.split(/\s+/).length / 200) : 0;
+  const readingTime = lessonData && lessonData.content && lessonData.content.trim() ? Math.ceil(lessonData.content.split(/\s+/).length / 200) : 0;
 
   // Transform 
 

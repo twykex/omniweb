@@ -220,6 +220,7 @@ def analyze_node(req: AnalysisRequest):
         "quiz": f"Create a 3-question multiple choice quiz about '{req.node}'. Format: Question, Options, then Answer at the very end."
     }
 
+    # Added diagram instructions to the system prompt
     system_prompt = f"""
     Context: {req.context}
     Topic: {req.node}
@@ -227,6 +228,20 @@ def analyze_node(req: AnalysisRequest):
 
     Style: Engaging, Professor-like, Clear.
     Format: Markdown with headers (#, ##), bolding (**), and lists (-).
+
+    VISUAL AIDS:
+    If a specific concept is best understood visually (e.g., anatomy, machine parts, complex cycles), insert an image tag like 
+
+[Image of query]
+ on its own line.
+    Example: 
+
+[Image of human heart chambers]
+ or 
+
+[Image of steam engine pistons]
+.
+    Only use this when it adds significant instructive value.
     """
 
     payload = {
