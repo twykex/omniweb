@@ -219,6 +219,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   };
 
   const handleBreadcrumbClick = (index) => {
+      if (isThinking) return;
       if (index + 1 < columns.length) {
           setColumns(columns.slice(0, index + 2));
       }
