@@ -36,6 +36,8 @@ class AnalysisRequest(BaseModel):
     context: str
     model: str
     mode: str
+    difficulty: Optional[str] = "medium"
+    num_questions: Optional[int] = 3
 
 
 def robust_json_parser(text):
@@ -217,7 +219,7 @@ def analyze_node(req: AnalysisRequest):
         "impact": f"Analyze the significance of '{req.node}'. Why does it matter to humanity or the universe? What are the ethical or practical implications?",
         "eli5": f"Explain '{req.node}' to a 5-year-old. Use simple words and fun examples.",
         "future": f"Speculate on the future of '{req.node}'. What advances or changes can we expect in the next 50 years?",
-        "quiz": f"Create a 3-question multiple choice quiz about '{req.node}'. Return ONLY valid JSON. The JSON should be an object with a key 'questions' which is a list of objects. Each question object must have: 'question' (string), 'options' (list of 4 strings), 'correct_index' (integer 0-3), and 'explanation' (string). Do not use markdown formatting."
+        "quiz": f"Create a {req.num_questions}-question multiple choice quiz about '{req.node}'. Difficulty: {req.difficulty}. Return ONLY valid JSON. The JSON should be an object with a key 'questions' which is a list of objects. Each question object must have: 'question' (string), 'options' (list of 4 strings), 'correct_index' (integer 0-3), and 'explanation' (string). Do not use markdown formatting."
     }
 
     if req.mode == "history":
@@ -230,10 +232,18 @@ def analyze_node(req: AnalysisRequest):
         Example: [{{ "year": "1905", "title": "Special Relativity", "description": "Einstein publishes his paper..." }}]
         """
     elif req.mode == "quiz":
+        difficulty_guidance = {
+            "easy": "Focus on basic facts and definitions.",
+            "medium": "Focus on conceptual understanding and connections.",
+            "hard": "Focus on complex analysis, edge cases, and synthesis of ideas."
+        }.get(req.difficulty, "Focus on conceptual understanding.")
+
         system_prompt = f"""
         Context: {req.context}
         Topic: {req.node}
         Task: {prompts.get(req.mode)}
+
+        Difficulty Guidance: {difficulty_guidance}
 
         Style: Engaging, Professor-like, Clear.
         Format: JSON only. Do not use Markdown code blocks.

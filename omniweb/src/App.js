@@ -205,6 +205,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
     const currentSeen = col.seenNodes || col.nodes.map(n => n.name);
     const parentSiblings = columns[colIndex - 1].nodes.map(n => n.name);
+    // Explicitly aggregate all seen nodes to ensure backend avoids reusing them
     const avoidList = [...new Set([...currentSeen, ...parentSiblings, parentNodeName])];
 
     setIsThinking(true);
@@ -376,9 +377,10 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 <button
                   className="regenerate-btn"
                   onClick={() => handleRegenerate(colIdx)}
-                  title="Regenerate with new topics"
+                  title="Regenerate with new topics (avoids duplicates)"
+                  data-testid="regenerate-btn"
                 >
-                  ↻
+                   ↻ REGENERATE
                 </button>
               )}
             </div>
@@ -451,7 +453,11 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                     <HistoryTimeline jsonString={processedContent} />
                 ) : (
                     lessonData.mode === 'quiz' ? (
-                        <QuizInterface content={lessonData.content} quizConfig={lessonData.quizConfig} />
+                        <QuizInterface
+                            content={lessonData.content}
+                            quizConfig={lessonData.quizConfig}
+                            onNewQuiz={() => openLesson(analyzingNode, 'quiz', lessonData.quizConfig)}
+                        />
                     ) : (
                     <ReactMarkdown components={{
                         blockquote: ({node, ...props}) => <div className="quote-box" {...props} />,
@@ -714,7 +720,7 @@ const QuizConfig = ({ onStart }) => {
   );
 };
 
-const QuizInterface = ({ content, quizConfig }) => {
+const QuizInterface = ({ content, quizConfig, onNewQuiz }) => {
   const [quizData, setQuizData] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
@@ -722,7 +728,12 @@ const QuizInterface = ({ content, quizConfig }) => {
   const [showResult, setShowResult] = useState(false);
   const [quizFinished, setQuizFinished] = useState(false);
   const [parseError, setParseError] = useState(false);
-  const [userAnswers, setUserAnswers] = useState([]); // Store answers for review
+  const [userAnswers, setUserAnswers] = useState([]);
+
+  // New State
+  const [streak, setStreak] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [timerActive, setTimerActive] = useState(false);
 
   useEffect(() => {
     try {
@@ -747,14 +758,45 @@ const QuizInterface = ({ content, quizConfig }) => {
     }
   }, [content]);
 
+  // Timer Effect
+  useEffect(() => {
+    let interval = null;
+    if (timerActive && timeLeft > 0 && !showResult && !quizFinished) {
+      interval = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && timerActive) {
+      handleOptionClick(-1); // Timeout
+    }
+    return () => clearInterval(interval);
+  }, [timerActive, timeLeft, showResult, quizFinished]);
+
+  // Start timer when question changes
+  useEffect(() => {
+    if (quizData && !showResult && !quizFinished) {
+        setTimeLeft(30);
+        setTimerActive(true);
+    }
+  }, [currentQuestion, quizData, showResult, quizFinished]);
+
   const handleOptionClick = (index) => {
-    if (selectedOption !== null) return;
+    if (selectedOption !== null && index !== -1) return; // Prevent clicks after selection, allow timeout
+
+    setTimerActive(false);
     setSelectedOption(index);
-    const isCorrect = index === quizData.questions[currentQuestion].correct_index;
+
+    let isCorrect = false;
+    if (index !== -1) {
+        isCorrect = index === quizData.questions[currentQuestion].correct_index;
+    }
+
     if (isCorrect) {
         setScore(score + 1);
+        setStreak(streak + 1);
+    } else {
+        setStreak(0);
     }
-    setUserAnswers([...userAnswers, { questionIndex: currentQuestion, selected: index, correct: isCorrect }]);
+    setUserAnswers([...userAnswers, { questionIndex: currentQuestion, selected: index, correct: isCorrect, timeOut: index === -1 }]);
     setShowResult(true);
   };
 
@@ -805,7 +847,9 @@ const QuizInterface = ({ content, quizConfig }) => {
                                       <span style={{color:'#34d399'}}>✓ Correct</span>
                                   ) : (
                                       <>
-                                          <span style={{color:'#f87171'}}>✗ You chose: {q.options[ans?.selected]}</span>
+                                          <span style={{color:'#f87171'}}>
+                                            {ans?.timeOut ? '⏱️ Timed Out' : `✗ You chose: ${q.options[ans?.selected]}`}
+                                          </span>
                                           <br/>
                                           <span style={{color:'#34d399'}}>✓ Correct: {q.options[q.correct_index]}</span>
                                       </>
@@ -816,14 +860,21 @@ const QuizInterface = ({ content, quizConfig }) => {
                   })}
               </div>
 
-              <button onClick={() => {
-                  setScore(0);
-                  setCurrentQuestion(0);
-                  setQuizFinished(false);
-                  setSelectedOption(null);
-                  setShowResult(false);
-                  setUserAnswers([]);
-              }} className="retry-btn" style={{marginTop: '20px'}}>RETRY</button>
+              <div className="quiz-actions" style={{marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center'}}>
+                <button onClick={() => {
+                    setScore(0);
+                    setCurrentQuestion(0);
+                    setQuizFinished(false);
+                    setSelectedOption(null);
+                    setShowResult(false);
+                    setUserAnswers([]);
+                    setStreak(0);
+                }} className="retry-btn">RETRY SAME QUESTIONS</button>
+
+                <button onClick={onNewQuiz} className="retry-btn" style={{background: 'rgba(139, 92, 246, 0.2)', borderColor: 'rgba(139, 92, 246, 0.5)'}}>
+                    GENERATE NEW QUIZ
+                </button>
+              </div>
           </div>
       );
   }
@@ -832,6 +883,19 @@ const QuizInterface = ({ content, quizConfig }) => {
 
   return (
       <div className="quiz-container">
+          <div className="quiz-header">
+             <div className="streak-badge">
+                🔥 {streak}
+             </div>
+             <div className="timer-track">
+                <div
+                    className={`timer-fill ${timeLeft < 10 ? 'danger' : ''}`}
+                    style={{width: `${(timeLeft / 30) * 100}%`}}
+                ></div>
+             </div>
+             <div className="timer-text">{timeLeft}s</div>
+          </div>
+
           <div className="quiz-progress-bar">
               <div className="progress-fill" style={{width: `${((currentQuestion) / quizData.questions.length) * 100}%`}}></div>
           </div>
@@ -1285,10 +1349,15 @@ const GlobalCSS = () => (
       letter-spacing: 1.5px; opacity: 0.6; display: flex; justify-content: space-between; align-items: center;
     }
     .regenerate-btn {
-      background: none; border: none; color: var(--text-muted); cursor: pointer;
-      font-size: 14px; transition: color 0.2s; padding: 0; line-height: 1;
+      background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
+      color: var(--text-muted); cursor: pointer;
+      font-size: 10px; transition: all 0.2s; padding: 6px 10px; line-height: 1; border-radius: 4px;
+      display: flex; align-items: center; gap: 6px; font-weight: 700; letter-spacing: 0.5px;
     }
-    .regenerate-btn:hover { color: var(--primary); }
+    .regenerate-btn:hover {
+        color: var(--primary); border-color: var(--primary);
+        background: rgba(139, 92, 246, 0.1);
+    }
     .node-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 100px; }
 
     /* NODE CARDS */
@@ -1604,6 +1673,13 @@ const GlobalCSS = () => (
     
     .spinner { width: 30px; height: 30px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--secondary); border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .quiz-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .streak-badge { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.4); }
+    .timer-track { flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin: 0 15px; overflow: hidden; }
+    .timer-fill { height: 100%; background: #34d399; transition: width 1s linear; }
+    .timer-fill.danger { background: #f87171; }
+    .timer-text { font-size: 12px; font-weight: 700; color: var(--text-muted); width: 30px; text-align: right; }
   `}</style>
 );
 
