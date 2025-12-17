@@ -1,3 +1,4 @@
+import os
 import json
 import requests
 import re
@@ -10,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
-OLLAMA_BASE = "http://localhost:11434"
+OLLAMA_BASE = os.getenv("OLLAMA_BASE", "http://localhost:11434")
 
 app = FastAPI()
 
@@ -40,10 +41,14 @@ class AnalysisRequest(BaseModel):
 def robust_json_parser(text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
+
+    # Strategy: Find the first '{' and the last '}'
     start = text.find('{')
     end = text.rfind('}') + 1
+    
     if start != -1 and end != -1:
         text = text[start:end]
+    
     return text
 
 
@@ -53,19 +58,16 @@ def get_gpu_vram():
         if shutil.which("nvidia-smi"):
             output = subprocess.check_output(
                 ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-                encoding="utf-8"
+                encoding="utf-8",
+                timeout=5
             )
-            # Sum up all GPUs? Usually we run on one, but let's take the first one or sum?
-            # For simplicity, taking the first one (usually index 0) or the max.
-            # If multiple lines, split lines.
             lines = output.strip().split('\n')
             if lines:
                 total_mib = int(lines[0]) # Use first GPU
                 return total_mib * 1024 * 1024
 
-        # Check for macOS (Unified Memory) - rough estimate (75% of total RAM usually available for GPU)
         if platform.system() == "Darwin":
-            output = subprocess.check_output(["sysctl", "-n", "hw.memsize"], encoding="utf-8")
+            output = subprocess.check_output(["sysctl", "-n", "hw.memsize"], encoding="utf-8", timeout=5)
             total_mem = int(output.strip())
             return int(total_mem * 0.75)
 
@@ -75,7 +77,6 @@ def get_gpu_vram():
 
 
 def get_available_models_list():
-    # Helper to just return list of names (used internally for fallback logic)
     try:
         res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
         if res.status_code == 200:
@@ -88,7 +89,6 @@ def get_available_models_list():
 
 @app.get("/models")
 def get_models():
-    # Helper to return detailed model info for the frontend
     vram = get_gpu_vram()
     try:
         res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
@@ -99,9 +99,7 @@ def get_models():
                 size_bytes = m.get('size', 0)
                 fits_vram = True
 
-                # If we detected VRAM, check if model fits
                 if vram is not None:
-                    # heuristic: model size * 1.2 for context/overhead
                     required = size_bytes * 1.2
                     fits_vram = required < vram
 
@@ -112,7 +110,6 @@ def get_models():
                     "fits": fits_vram
                 })
 
-            # Sort by name
             models_list.sort(key=lambda x: x['name'])
 
             return {"models": models_list, "vram_detected": vram is not None}
@@ -125,11 +122,9 @@ def get_models():
 def expand_node(req: ExpandRequest):
     print(f"\n⚡ Expanding Topic: [{req.node}]")
 
-    # Context truncation
     context_parts = req.context.split(" > ")
     short_context = " > ".join(context_parts[-4:])
 
-    # Prepare exclusion instructions
     exclusion_text = ""
     if req.recent_nodes:
         exclusion_text = f"4. AVOID using these words/topics: {', '.join(req.recent_nodes)}"
@@ -165,26 +160,33 @@ def expand_node(req: ExpandRequest):
         }
         try:
             response = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=60)
+            response.raise_for_status()
             json_text = robust_json_parser(response.json().get("response", ""))
             return json.loads(json_text)
         except Exception as e:
             print(f"Error calling {model}: {e}")
             return None
 
-    # First attempt
     data = call_llm(req.model, system_prompt)
 
-    # Validation and Fallback Logic
     def is_valid(data, recent_nodes):
         if not data or "children" not in data or not data["children"]:
             return False
-        # Check for Forbidden Topics
-        if recent_nodes:
-            lower_recent = {n.lower() for n in recent_nodes}
-            for child in data["children"]:
-                if child["name"].lower() in lower_recent:
-                    print(f"Found forbidden topic: {child['name']}")
-                    return False
+
+        # Check for Forbidden Topics and Duplicates
+        lower_recent = {n.lower() for n in recent_nodes} if recent_nodes else set()
+        seen_names = set()
+
+        for child in data["children"]:
+            name_lower = child["name"].lower()
+            if name_lower in lower_recent:
+                print(f"Found forbidden topic: {child['name']}")
+                return False
+            if name_lower in seen_names:
+                print(f"Found duplicate topic in response: {child['name']}")
+                return False
+            seen_names.add(name_lower)
+
         return True
 
     if is_valid(data, req.recent_nodes):
@@ -192,17 +194,16 @@ def expand_node(req: ExpandRequest):
 
     print("⚠️ Primary model failed or returned repeat topics. Attempting fallback...")
 
-    # Try fallback model
     available_models = get_available_models_list()
-    fallback_model = next((m for m in available_models if m != req.model), None)
+    # Try to find a fallback that is NOT the current model
+    fallback_candidates = [m for m in available_models if m != req.model]
 
-    if fallback_model:
+    for fallback_model in fallback_candidates:
         print(f"🔄 Switching to fallback model: {fallback_model}")
         data = call_llm(fallback_model, system_prompt)
         if is_valid(data, req.recent_nodes):
             return data
 
-    # If all fails, return empty or whatever we got (better to return empty if invalid)
     return {"children": []}
 
 
