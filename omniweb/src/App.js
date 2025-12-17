@@ -221,7 +221,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
           });
         }
       }
-      setLessonData(prev => prev ? { ...prev, isLoading: false } : null);
+      setLessonData(prev => prev ? { ...prev, isLoading: false, isComplete: true } : null);
 
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -350,7 +350,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 </div>
 
                 <div className="panel-content custom-scroll">
-                {lessonData.isLoading ? (
+                {lessonData.isLoading || (lessonData.mode === 'quiz' && !lessonData.isComplete) ? (
                     <div className="text-skeleton">
                         <div className="sk-line w-75"></div>
                         <div className="sk-line w-100"></div>
@@ -359,13 +359,18 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         <br/>
                         <div className="sk-line w-100"></div>
                         <div className="sk-line w-75"></div>
+                        {lessonData.mode === 'quiz' && <div style={{textAlign: 'center', marginTop: 20, color: 'var(--secondary)', fontWeight: 'bold', fontSize: '12px', letterSpacing: '1px'}}>GENERATING QUIZ...</div>}
                     </div>
                 ) : (
+                    lessonData.mode === 'quiz' ? (
+                        <QuizInterface content={lessonData.content} />
+                    ) : (
                     <ReactMarkdown components={{
                         blockquote: ({node, ...props}) => <div className="quote-box" {...props} />
                     }}>
                         {processedContent}
                     </ReactMarkdown>
+                    )
                 )}
                 </div>
 
@@ -529,6 +534,127 @@ const ToastContainer = ({ toasts }) => (
 );
 
 // --- COMPONENT MERGES (Redesign + Functionality) ---
+
+const QuizInterface = ({ content }) => {
+  const [quizData, setQuizData] = useState(null);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [selectedOption, setSelectedOption] = useState(null);
+  const [score, setScore] = useState(0);
+  const [showResult, setShowResult] = useState(false);
+  const [quizFinished, setQuizFinished] = useState(false);
+  const [parseError, setParseError] = useState(false);
+
+  useEffect(() => {
+    try {
+      let jsonStr = content.trim();
+      jsonStr = jsonStr.replace(/```json/gi, "").replace(/```/g, "");
+      const start = jsonStr.indexOf('{');
+      const end = jsonStr.lastIndexOf('}') + 1;
+      if (start !== -1 && end !== -1) {
+          jsonStr = jsonStr.substring(start, end);
+          const data = JSON.parse(jsonStr);
+          if (data && data.questions) {
+              setQuizData(data);
+          } else {
+              setParseError(true);
+          }
+      } else {
+           setParseError(true);
+      }
+    } catch (e) {
+      console.error("Quiz parse error", e);
+      setParseError(true);
+    }
+  }, [content]);
+
+  const handleOptionClick = (index) => {
+    if (selectedOption !== null) return;
+    setSelectedOption(index);
+    if (index === quizData.questions[currentQuestion].correct_index) {
+        setScore(score + 1);
+    }
+    setShowResult(true);
+  };
+
+  const nextQuestion = () => {
+    setSelectedOption(null);
+    setShowResult(false);
+    if (currentQuestion + 1 < quizData.questions.length) {
+        setCurrentQuestion(currentQuestion + 1);
+    } else {
+        setQuizFinished(true);
+    }
+  };
+
+  if (parseError) {
+      return (
+        <div className="quiz-error">
+            <h3>⚠️ Unable to load quiz</h3>
+            <p>The neural network failed to generate a valid quiz format.</p>
+            <div className="raw-content">
+                <small>Raw output:</small>
+                <pre>{content}</pre>
+            </div>
+        </div>
+      );
+  }
+
+  if (!quizData) return <div className="quiz-loading">Loading Quiz...</div>;
+
+  if (quizFinished) {
+      return (
+          <div className="quiz-results">
+              <h3>Quiz Completed!</h3>
+              <div className="score-circle">
+                  <span className="score-num">{Math.round((score / quizData.questions.length) * 100)}%</span>
+              </div>
+              <p>You got {score} out of {quizData.questions.length} correct.</p>
+              <button onClick={() => {
+                  setScore(0);
+                  setCurrentQuestion(0);
+                  setQuizFinished(false);
+                  setSelectedOption(null);
+                  setShowResult(false);
+              }} className="retry-btn" style={{marginTop: '20px'}}>RETRY</button>
+          </div>
+      );
+  }
+
+  const question = quizData.questions[currentQuestion];
+
+  return (
+      <div className="quiz-container">
+          <div className="quiz-progress">
+              Question {currentQuestion + 1} of {quizData.questions.length}
+          </div>
+          <h3 className="quiz-question">{question.question}</h3>
+          <div className="quiz-options">
+              {question.options.map((opt, idx) => (
+                  <button
+                    key={idx}
+                    className={`quiz-option ${selectedOption === idx ? (idx === question.correct_index ? 'correct' : 'wrong') : ''} ${showResult && idx === question.correct_index ? 'correct' : ''}`}
+                    onClick={() => handleOptionClick(idx)}
+                    disabled={selectedOption !== null}
+                  >
+                      {opt}
+                      {selectedOption === idx && (idx === question.correct_index ? ' ✓' : ' ✗')}
+                  </button>
+              ))}
+          </div>
+          {showResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className="quiz-explanation"
+              >
+                  <strong>Explanation:</strong> {question.explanation}
+                  <button className="next-btn" onClick={nextQuestion}>
+                      {currentQuestion + 1 < quizData.questions.length ? "Next Question" : "See Results"}
+                  </button>
+              </motion.div>
+          )}
+      </div>
+  );
+};
 
 const FeatureCard = ({ icon, title, desc }) => (
   <motion.div 
@@ -1068,6 +1194,31 @@ const GlobalCSS = () => (
     }
     .toast.success { border-color: #34d399; color: #34d399; }
     .toast.error { border-color: #f87171; color: #f87171; }
+
+    /* QUIZ STYLES */
+    .quiz-container { display: flex; flex-direction: column; gap: 20px; }
+    .quiz-progress { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--secondary); font-weight: 700; }
+    .quiz-question { font-size: 22px; color: #fff; margin: 0; font-family: 'Inter', sans-serif; font-weight: 600; }
+    .quiz-options { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+    .quiz-option {
+        background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
+        padding: 16px; border-radius: 8px; color: #d1d5db; text-align: left; cursor: pointer;
+        transition: 0.2s; font-size: 15px; position: relative;
+    }
+    .quiz-option:hover:not(:disabled) { background: rgba(255,255,255,0.1); transform: translateX(5px); }
+    .quiz-option.correct { background: rgba(52, 211, 153, 0.2); border-color: rgba(52, 211, 153, 0.5); color: #34d399; }
+    .quiz-option.wrong { background: rgba(248, 113, 113, 0.2); border-color: rgba(248, 113, 113, 0.5); color: #f87171; }
+    .quiz-explanation { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 8px; border-left: 3px solid var(--primary); margin-top: 10px; font-size: 14px; line-height: 1.6; }
+    .next-btn { display: block; margin-top: 15px; background: var(--primary); border: none; padding: 10px 20px; border-radius: 6px; color: #fff; font-weight: 600; cursor: pointer; float: right; }
+
+    .quiz-results { text-align: center; padding: 40px; }
+    .score-circle {
+        width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--primary);
+        display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto;
+        font-size: 32px; font-weight: 700; color: #fff;
+    }
+    .quiz-error { text-align: center; color: #f87171; }
+    .raw-content { background: #000; padding: 10px; border-radius: 4px; overflow-x: auto; text-align: left; margin-top: 10px; opacity: 0.7; }
   `}</style>
 );
 
