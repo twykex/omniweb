@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { motion } from "framer-motion";
 import ModelSelector from './ModelSelector';
 import FeatureCard from './FeatureCard';
+import Icons from './Icons';
 import { SUGGESTED_TOPICS } from '../constants';
 
 const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic, backendError, onRetry, onSurprise }) => {
@@ -39,8 +40,8 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
               autoFocus
               disabled={backendError}
           />
-          <button onClick={onStart} disabled={isLoading || backendError || !startTopic.trim()} className="go-btn">
-                ➜
+          <button onClick={onStart} disabled={isLoading || backendError || !startTopic.trim()} className="search-btn" aria-label="Start Learning">
+             <div className="start-icon"><Icons.ArrowRight /></div>
           </button>
         </motion.div>
 
@@ -52,8 +53,9 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
                 onClick={onSurprise}
                 className="surprise-btn"
                 disabled={isLoading || backendError}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-                🎲 SURPRISE ME
+                <Icons.Dice /> <span>SURPRISE ME</span>
             </button>
         </motion.div>
 
@@ -66,7 +68,7 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
           {SUGGESTED_TOPICS.map(topic => (
             <button
               key={topic}
-              className="topic-tag"
+              className="chip-btn"
               onClick={() => {
                 setStartTopic(topic);
                 inputRef.current?.focus();
