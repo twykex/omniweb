@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
+import { HistoryTimeline } from "./HistoryTimeline";
 
 const BASE_URL = "http://localhost:8000";
 
@@ -216,7 +217,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
             return { 
               ...prev, 
               content: prev.content + chunk,
-              isLoading: false 
+              isLoading: mode === 'history' ? true : false
             };
           });
         }
@@ -361,6 +362,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         <div className="sk-line w-75"></div>
                         {lessonData.mode === 'quiz' && <div style={{textAlign: 'center', marginTop: 20, color: 'var(--secondary)', fontWeight: 'bold', fontSize: '12px', letterSpacing: '1px'}}>GENERATING QUIZ...</div>}
                     </div>
+                ) : lessonData.mode === 'history' ? (
+                    <HistoryTimeline jsonString={processedContent} />
                 ) : (
                     lessonData.mode === 'quiz' ? (
                         <QuizInterface content={lessonData.content} />
@@ -530,6 +533,7 @@ const SkeletonColumn = () => (
         </div>
     </div>
 );
+
 
 const ToastContainer = ({ toasts }) => (
     <div className="toast-container">
@@ -1132,6 +1136,46 @@ const GlobalCSS = () => (
         padding: 24px; margin: 30px 0; font-style: italic; color: #e5e7eb; border-radius: 0 8px 8px 0;
     }
 
+    /* HISTORY TIMELINE */
+    .timeline-container {
+        position: relative;
+        padding-left: 20px;
+        border-left: 2px solid rgba(139, 92, 246, 0.3);
+        margin: 20px 0 20px 10px;
+    }
+    .timeline-item {
+        position: relative;
+        margin-bottom: 40px;
+    }
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -27px;
+        top: 0;
+        width: 12px;
+        height: 12px;
+        background: var(--primary);
+        border-radius: 50%;
+        box-shadow: 0 0 10px var(--primary);
+    }
+    .timeline-year {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--primary);
+        margin-bottom: 8px;
+        font-family: 'Inter', sans-serif;
+    }
+    .timeline-content h4 {
+        margin: 0 0 8px 0;
+        color: #fff;
+        font-size: 18px;
+    }
+    .timeline-content p {
+        margin: 0;
+        font-size: 15px;
+        color: var(--text-muted);
+        line-height: 1.6;
+    }
 
     .panel-footer { padding: 20px 50px; border-top: 1px solid var(--glass-border); display: flex; justify-content: flex-end; gap: 12px; background: rgba(0,0,0,0.3); }
     .panel-footer button { 

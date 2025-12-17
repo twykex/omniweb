@@ -213,32 +213,46 @@ def analyze_node(req: AnalysisRequest):
 
     prompts = {
         "explain": f"Teach '{req.node}' to a beginner. Use a clear analogy (formatted as a > blockquote) to explain the core concept. Then detail how it works.",
-        "history": f"Provide a historical timeline of '{req.node}'. Key figures, dates, and the 'Aha!' moment of discovery. Use Markdown lists.",
+        "history": f"Provide a historical timeline of '{req.node}'. Return a JSON array where each element has 'year', 'title', and 'description'. Do not use Markdown or code blocks.",
         "impact": f"Analyze the significance of '{req.node}'. Why does it matter to humanity or the universe? What are the ethical or practical implications?",
         "eli5": f"Explain '{req.node}' to a 5-year-old. Use simple words and fun examples.",
         "future": f"Speculate on the future of '{req.node}'. What advances or changes can we expect in the next 50 years?",
         "quiz": f"Create a 3-question multiple choice quiz about '{req.node}'. Return ONLY valid JSON. The JSON should be an object with a key 'questions' which is a list of objects. Each question object must have: 'question' (string), 'options' (list of 4 strings), 'correct_index' (integer 0-3), and 'explanation' (string). Do not use markdown formatting."
     }
 
-    # Added diagram instructions to the system prompt
-    if req.mode == "quiz":
+    if req.mode == "history":
         system_prompt = f"""
-    Context: {req.context}
-    Topic: {req.node}
-    Task: {prompts.get(req.mode)}
+        Context: {req.context}
+        Topic: {req.node}
+        Task: {prompts.get(req.mode)}
 
-    Style: Engaging, Professor-like, Clear.
-    Format: JSON only. Do not use Markdown code blocks.
-    """
+        Output format: Pure JSON Array. No Markdown.
+        Example: [{{ "year": "1905", "title": "Special Relativity", "description": "Einstein publishes his paper..." }}]
+        """
+    elif req.mode == "quiz":
+        system_prompt = f"""
+        Context: {req.context}
+        Topic: {req.node}
+        Task: {prompts.get(req.mode)}
+
+        Style: Engaging, Professor-like, Clear.
+        Format: JSON only. Do not use Markdown code blocks.
+        """
     else:
         system_prompt = f"""
-    Context: {req.context}
-    Topic: {req.node}
-    Task: {prompts.get(req.mode)}
+        Context: {req.context}
+        Topic: {req.node}
+        Task: {prompts.get(req.mode)}
 
-    Style: Engaging, Professor-like, Clear.
-    Format: Markdown with headers (#, ##), bolding (**), and lists (-).
-    """
+        Style: Engaging, Professor-like, Clear.
+        Format: Markdown with headers (#, ##), bolding (**), and lists (-).
+        
+        VISUAL AIDS:
+        If a diagram or image would significantly improve understanding (e.g., complex anatomy, mechanical systems, or specific scientific cycles), insert a tag on a new line in the format: .
+        - Use sparingly: Only trigger an image if it adds instructional value.
+        - Be specific in the query inside the brackets.
+        - Place the tag immediately before or after the relevant explanation.
+        """
 
     payload = {
         "model": req.model,
