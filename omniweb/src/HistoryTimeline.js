@@ -26,9 +26,21 @@ export const HistoryTimeline = ({ jsonString }) => {
                     let stack = 0;
                     let end = -1;
                     let inString = false;
+                    let isEscaped = false;
                     for (let i = start; i < cleanJson.length; i++) {
                         const char = cleanJson[i];
-                        if (char === '"' && cleanJson[i-1] !== '\\') inString = !inString;
+                        if (isEscaped) {
+                            isEscaped = false;
+                            continue;
+                        }
+                        if (char === '\\') {
+                            isEscaped = true;
+                            continue;
+                        }
+                        if (char === '"') {
+                            inString = !inString;
+                            continue;
+                        }
                         if (!inString) {
                             if (char === '[') stack++;
                             else if (char === ']') {
