@@ -119,17 +119,37 @@ const LearningWorkspace = ({ model, initialTopic, onExit }) => {
 
   const openLesson = async (nodeName, mode) => {
     setAnalyzingNode(nodeName);
-    setLessonData({ content: null, mode: mode, isLoading: true });
+    setLessonData({ content: "", mode: mode, isLoading: true });
 
     try {
       const contextPath = columns.map(c => c.selectedNode).filter(Boolean).join(" > ");
-      const res = await axios.post(`${BASE_URL}/analyze`, {
-        node: nodeName,
-        context: contextPath,
-        model: model,
-        mode: mode
+      const response = await fetch(`${BASE_URL}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          node: nodeName,
+          context: contextPath,
+          model: model,
+          mode: mode
+        })
       });
-      setLessonData({ content: res.data.content, mode: mode, isLoading: false });
+
+      if (!response.ok) throw new Error("Network response was not ok");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      setLessonData(prev => ({ ...prev, isLoading: false }));
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        setLessonData(prev => ({
+          ...prev,
+          content: prev.content + text
+        }));
+      }
     } catch (err) {
       setLessonData({ content: "Connection lost.", mode: mode, isLoading: false });
     }

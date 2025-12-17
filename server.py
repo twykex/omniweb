@@ -3,6 +3,7 @@ import requests
 import re
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 OLLAMA_BASE = "http://localhost:11434"
@@ -115,12 +116,22 @@ def analyze_node(req: AnalysisRequest):
     payload = {
         "model": req.model,
         "prompt": system_prompt,
-        "stream": False,
+        "stream": True,
         "options": {"temperature": 0.6}
     }
 
-    try:
-        response = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=120)
-        return {"content": response.json().get("response", "Lesson generation failed.")}
-    except Exception as e:
-        return {"content": f"Error: {str(e)}"}
+    def generate():
+        try:
+            with requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, stream=True, timeout=120) as r:
+                for line in r.iter_lines():
+                    if line:
+                        try:
+                            chunk = json.loads(line)
+                            if "response" in chunk:
+                                yield chunk["response"]
+                        except:
+                            pass
+        except Exception as e:
+            yield f"Error: {str(e)}"
+
+    return StreamingResponse(generate(), media_type="text/plain")
