@@ -103,6 +103,10 @@ describe('Quiz Integration', () => {
         const quizBtn = await screen.findByText('Quiz');
         fireEvent.click(quizBtn);
 
+        // Wait for Quiz Config and click Start
+        const startQuizBtn = await screen.findByText('START QUIZ');
+        fireEvent.click(startQuizBtn);
+
         // Expect loading state first
         // Note: The loading state might flicker very fast because our mock stream is instant.
         // But we should see "GENERATING QUIZ..." or the quiz content eventually.
@@ -132,7 +136,7 @@ describe('Quiz Integration', () => {
         expect(screen.getByText('You got 1 out of 1 correct.')).toBeInTheDocument();
 
         // Retry
-        fireEvent.click(screen.getByText('RETRY'));
+        fireEvent.click(screen.getByText(/RETRY/));
         expect(screen.getByText('What is 2+2?')).toBeInTheDocument();
     });
 });

@@ -86,7 +86,7 @@ describe('App Integration', () => {
     expect(screen.getByText('Quantum Physics')).toBeInTheDocument();
 
     // Verify timeline bar is present
-    expect(screen.getByText('START')).toBeInTheDocument();
+    expect(screen.getByText('HOME')).toBeInTheDocument();
   });
 
   test('shows backend offline message when API fails', async () => {

@@ -80,7 +80,7 @@ def get_gpu_vram():
 
 def get_available_models_list():
     try:
-        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
+        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=5)
         if res.status_code == 200:
             data = res.json()
             return [m['name'] for m in data['models']]
@@ -93,7 +93,7 @@ def get_available_models_list():
 def get_models():
     vram = get_gpu_vram()
     try:
-        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
+        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=5)
         if res.status_code == 200:
             data = res.json()
             models_list = []
