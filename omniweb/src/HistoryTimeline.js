@@ -13,9 +13,22 @@ export const HistoryTimeline = ({ jsonString }) => {
             if (!jsonString) return;
             // cleaning the json string
             let cleanJson = jsonString.trim();
-            cleanJson = cleanJson.replace(/```json/g, "").replace(/```/g, "");
+            cleanJson = cleanJson.replace(/```json/gi, "").replace(/```/g, "");
 
-            const parsed = JSON.parse(cleanJson);
+            let parsed = null;
+            try {
+                parsed = JSON.parse(cleanJson);
+            } catch (e) {
+                // Failed to parse, try to extract array
+                const start = cleanJson.indexOf('[');
+                const end = cleanJson.lastIndexOf(']') + 1;
+                if (start !== -1 && end !== -1) {
+                    parsed = JSON.parse(cleanJson.substring(start, end));
+                } else {
+                    throw e;
+                }
+            }
+
             let parsedEvents = [];
 
             if (Array.isArray(parsed)) {
