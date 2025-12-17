@@ -246,7 +246,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 </div>
 
                 <div className="panel-tabs">
-                    {['explain', 'history', 'impact', 'eli5', 'future', 'quiz'].map(m => (
+                    {['explain', 'history', 'impact', 'eli5', 'quiz'].map(m => (
                         <button
                             key={m}
                             className={lessonData.mode === m ? 'active' : ''}
@@ -323,7 +323,6 @@ const NodeCard = ({ node, isActive, onClick, onAction }) => {
             <ActionButton label="History" onClick={() => onAction('history')} />
             <ActionButton label="Impact" onClick={() => onAction('impact')} />
             <ActionButton label="ELI5" onClick={() => onAction('eli5')} />
-            <ActionButton label="Future" onClick={() => onAction('future')} />
             <ActionButton label="Quiz" onClick={() => onAction('quiz')} />
           </motion.div>
         )}
