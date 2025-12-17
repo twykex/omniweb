@@ -13,14 +13,25 @@ jest.mock('react-markdown', () => ({
 }));
 
 // Mock Framer Motion
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }) => <div {...props}>{children}</div>,
-    h1: ({ children, ...props }) => <h1 {...props}>{children}</h1>,
-    p: ({ children, ...props }) => <p {...props}>{children}</p>,
-  },
-  AnimatePresence: ({ children }) => <>{children}</>,
-}));
+jest.mock('framer-motion', () => {
+  const filterProps = (props) => {
+    const {
+      initial, animate, exit, variants, transition, layout, layoutId,
+      onHoverStart, onHoverEnd, onTap, whileHover, whileTap,
+      ...validProps
+    } = props;
+    return validProps;
+  };
+
+  return {
+    motion: {
+      div: ({ children, ...props }) => <div {...filterProps(props)}>{children}</div>,
+      h1: ({ children, ...props }) => <h1 {...filterProps(props)}>{children}</h1>,
+      p: ({ children, ...props }) => <p {...filterProps(props)}>{children}</p>,
+    },
+    AnimatePresence: ({ children }) => <>{children}</>,
+  };
+});
 
 // Mock TextEncoder/TextDecoder for JSDOM if missing
 if (typeof TextEncoder === 'undefined') {
@@ -167,6 +178,34 @@ describe('OmniWeb Feature Tests', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('LEARNING MODULE')).not.toBeInTheDocument();
+    });
+  });
+
+  test('Shows warning toast when expansion returns no children', async () => {
+    render(<App />);
+
+    // Wait for models to load
+    await waitFor(() => expect(screen.getByText('LLAMA3')).toBeInTheDocument());
+
+    // Start
+    const input = screen.getByPlaceholderText(/What do you want to learn today/i);
+    fireEvent.change(input, { target: { value: 'Empty Topic' } });
+    fireEvent.click(screen.getByText('➜'));
+
+    // Wait for workspace
+    await waitFor(() => expect(screen.getByText('Empty Topic')).toBeInTheDocument());
+
+    // Mock next expand to return empty
+    axios.post.mockResolvedValueOnce({
+      data: { children: [] }
+    });
+
+    // Click node
+    fireEvent.click(screen.getByText('Empty Topic'));
+
+    // Verify toast
+    await waitFor(() => {
+        expect(screen.getByText('Could not expand this topic. Try again.')).toBeInTheDocument();
     });
   });
 });

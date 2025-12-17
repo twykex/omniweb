@@ -119,7 +119,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   useEffect(() => {
     if (endRef.current) {
       setTimeout(() => {
-        endRef.current.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
       }, 100);
     }
   }, [columns, isThinking]);
@@ -166,6 +166,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
           selectedNode: null, 
           nodes: res.data.children 
         }]);
+      } else {
+        addToast("Could not expand this topic. Try again.", "warning");
       }
     } catch (err) {
         console.error(err);
@@ -220,7 +222,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
           });
         }
       }
-      setLessonData(prev => prev ? { ...prev, isLoading: false } : null);
+      setLessonData(prev => prev ? { ...prev, isLoading: false, isComplete: true } : null);
 
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -241,6 +243,15 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
       if (index + 1 < columns.length) {
           setColumns(columns.slice(0, index + 2));
       }
+  };
+
+  const jumpToLevel = (index) => {
+    if (isThinking) return;
+    if (index === columns.length - 1) return;
+
+    const newCols = columns.slice(0, index + 1);
+    newCols[index] = { ...newCols[index], selectedNode: null };
+    setColumns(newCols);
   };
 
   const readingTime = lessonData && lessonData.content && lessonData.content.trim() ? Math.ceil(lessonData.content.split(/\s+/).length / 200) : 0;
@@ -306,6 +317,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
         <div ref={endRef} style={{minWidth: "60px", height: "100%"}} />
       </div>
 
+      <TimelineBar columns={columns} onJump={jumpToLevel} />
+
       <AnimatePresence>
         {lessonData && (
           <>
@@ -338,7 +351,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 </div>
 
                 <div className="panel-content custom-scroll">
-                {lessonData.isLoading ? (
+                {lessonData.isLoading || (lessonData.mode === 'quiz' && !lessonData.isComplete) ? (
                     <div className="text-skeleton">
                         <div className="sk-line w-75"></div>
                         <div className="sk-line w-100"></div>
@@ -347,15 +360,20 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         <br/>
                         <div className="sk-line w-100"></div>
                         <div className="sk-line w-75"></div>
+                        {lessonData.mode === 'quiz' && <div style={{textAlign: 'center', marginTop: 20, color: 'var(--secondary)', fontWeight: 'bold', fontSize: '12px', letterSpacing: '1px'}}>GENERATING QUIZ...</div>}
                     </div>
                 ) : lessonData.mode === 'history' ? (
                     <HistoryTimeline jsonString={processedContent} />
                 ) : (
+                    lessonData.mode === 'quiz' ? (
+                        <QuizInterface content={lessonData.content} />
+                    ) : (
                     <ReactMarkdown components={{
                         blockquote: ({node, ...props}) => <div className="quote-box" {...props} />
                     }}>
                         {processedContent}
                     </ReactMarkdown>
+                    )
                 )}
                 </div>
 
@@ -375,6 +393,51 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 };
 
 // --- SUB COMPONENTS ---
+
+const TimelineBar = ({ columns, onJump }) => {
+  return (
+    <div className="timeline-wrapper">
+      <motion.div
+        className="timeline-container"
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 120, damping: 15 }}
+      >
+        <div className="timeline-track custom-scroll">
+          {columns.map((col, i) => {
+            const isLast = i === columns.length - 1;
+            const label = i === 0 ? "HOME" : columns[i - 1].selectedNode;
+
+            return (
+              <React.Fragment key={i}>
+                <motion.div
+                  className={`timeline-node ${isLast ? 'current' : 'past'}`}
+                  onClick={() => onJump(i)}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  title={isLast ? "Current View" : `Jump to ${label}`}
+                >
+                  <div className="t-dot">
+                     {i === 0 ? (
+                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                     ) : (
+                       <span>{i + 1}</span>
+                     )}
+                     {isLast && <motion.div layoutId="pulse" className="t-pulse" />}
+                  </div>
+                  <div className="t-info">
+                    <span className="t-label">{label}</span>
+                  </div>
+                </motion.div>
+                {!isLast && <div className="t-connector" />}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
 
 const NodeCard = ({ node, isActive, onClick, onAction }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -494,6 +557,127 @@ const ToastContainer = ({ toasts }) => (
 );
 
 // --- COMPONENT MERGES (Redesign + Functionality) ---
+
+const QuizInterface = ({ content }) => {
+  const [quizData, setQuizData] = useState(null);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [selectedOption, setSelectedOption] = useState(null);
+  const [score, setScore] = useState(0);
+  const [showResult, setShowResult] = useState(false);
+  const [quizFinished, setQuizFinished] = useState(false);
+  const [parseError, setParseError] = useState(false);
+
+  useEffect(() => {
+    try {
+      let jsonStr = content.trim();
+      jsonStr = jsonStr.replace(/```json/gi, "").replace(/```/g, "");
+      const start = jsonStr.indexOf('{');
+      const end = jsonStr.lastIndexOf('}') + 1;
+      if (start !== -1 && end !== -1) {
+          jsonStr = jsonStr.substring(start, end);
+          const data = JSON.parse(jsonStr);
+          if (data && data.questions) {
+              setQuizData(data);
+          } else {
+              setParseError(true);
+          }
+      } else {
+           setParseError(true);
+      }
+    } catch (e) {
+      console.error("Quiz parse error", e);
+      setParseError(true);
+    }
+  }, [content]);
+
+  const handleOptionClick = (index) => {
+    if (selectedOption !== null) return;
+    setSelectedOption(index);
+    if (index === quizData.questions[currentQuestion].correct_index) {
+        setScore(score + 1);
+    }
+    setShowResult(true);
+  };
+
+  const nextQuestion = () => {
+    setSelectedOption(null);
+    setShowResult(false);
+    if (currentQuestion + 1 < quizData.questions.length) {
+        setCurrentQuestion(currentQuestion + 1);
+    } else {
+        setQuizFinished(true);
+    }
+  };
+
+  if (parseError) {
+      return (
+        <div className="quiz-error">
+            <h3>⚠️ Unable to load quiz</h3>
+            <p>The neural network failed to generate a valid quiz format.</p>
+            <div className="raw-content">
+                <small>Raw output:</small>
+                <pre>{content}</pre>
+            </div>
+        </div>
+      );
+  }
+
+  if (!quizData) return <div className="quiz-loading">Loading Quiz...</div>;
+
+  if (quizFinished) {
+      return (
+          <div className="quiz-results">
+              <h3>Quiz Completed!</h3>
+              <div className="score-circle">
+                  <span className="score-num">{Math.round((score / quizData.questions.length) * 100)}%</span>
+              </div>
+              <p>You got {score} out of {quizData.questions.length} correct.</p>
+              <button onClick={() => {
+                  setScore(0);
+                  setCurrentQuestion(0);
+                  setQuizFinished(false);
+                  setSelectedOption(null);
+                  setShowResult(false);
+              }} className="retry-btn" style={{marginTop: '20px'}}>RETRY</button>
+          </div>
+      );
+  }
+
+  const question = quizData.questions[currentQuestion];
+
+  return (
+      <div className="quiz-container">
+          <div className="quiz-progress">
+              Question {currentQuestion + 1} of {quizData.questions.length}
+          </div>
+          <h3 className="quiz-question">{question.question}</h3>
+          <div className="quiz-options">
+              {question.options.map((opt, idx) => (
+                  <button
+                    key={idx}
+                    className={`quiz-option ${selectedOption === idx ? (idx === question.correct_index ? 'correct' : 'wrong') : ''} ${showResult && idx === question.correct_index ? 'correct' : ''}`}
+                    onClick={() => handleOptionClick(idx)}
+                    disabled={selectedOption !== null}
+                  >
+                      {opt}
+                      {selectedOption === idx && (idx === question.correct_index ? ' ✓' : ' ✗')}
+                  </button>
+              ))}
+          </div>
+          {showResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className="quiz-explanation"
+              >
+                  <strong>Explanation:</strong> {question.explanation}
+                  <button className="next-btn" onClick={nextQuestion}>
+                      {currentQuestion + 1 < quizData.questions.length ? "Next Question" : "See Results"}
+                  </button>
+              </motion.div>
+          )}
+      </div>
+  );
+};
 
 const FeatureCard = ({ icon, title, desc }) => (
   <motion.div 
@@ -871,7 +1055,7 @@ const GlobalCSS = () => (
 
     .column { min-width: var(--col-width); width: var(--col-width); display: flex; flex-direction: column; }
     .column-header { font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 16px; letter-spacing: 1.5px; opacity: 0.6; }
-    .node-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 50px; }
+    .node-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 100px; }
 
     /* NODE CARDS */
     .node-card { 
@@ -1006,9 +1190,93 @@ const GlobalCSS = () => (
     .w-100 { width: 100%; } .w-75 { width: 75%; } .w-50 { width: 50%; }
     @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 0.6; } 100% { opacity: 0.3; } }
 
+    /* TIMELINE */
+    .timeline-wrapper {
+        position: fixed; bottom: 30px; left: 0; right: 0;
+        display: flex; justify-content: center; z-index: 50;
+        pointer-events: none;
+    }
+
+    .timeline-container {
+        pointer-events: auto;
+        height: auto;
+        background: rgba(15, 15, 20, 0.85);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 100px;
+        backdrop-filter: blur(20px);
+        padding: 8px 10px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.2);
+        display: flex; align-items: center; justify-content: center;
+        max-width: 90%;
+    }
+
+    .timeline-track {
+        display: flex; align-items: center;
+        gap: 6px;
+        overflow-x: auto;
+        padding: 4px 10px;
+        max-width: 100%;
+        scrollbar-width: none;
+    }
+    .timeline-track::-webkit-scrollbar { display: none; }
+
+    .timeline-node {
+        display: flex; align-items: center;
+        cursor: pointer;
+        opacity: 0.6;
+        transition: 0.3s;
+        position: relative;
+        padding: 6px 12px 6px 6px;
+        border-radius: 50px;
+        background: transparent;
+        border: 1px solid transparent;
+        gap: 10px;
+    }
+
+    .timeline-node:hover { opacity: 1; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+    .timeline-node.current { opacity: 1; background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.3); padding-right: 16px; }
+
+    .t-dot {
+        width: 32px; height: 32px; border-radius: 50%;
+        background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700; color: #fff;
+        position: relative;
+        flex-shrink: 0;
+    }
+    .timeline-node.current .t-dot {
+        background: var(--primary); border-color: var(--primary);
+        box-shadow: 0 0 15px rgba(139, 92, 246, 0.5);
+    }
+
+    .t-pulse {
+        position: absolute; inset: -4px; border-radius: 50%;
+        border: 2px solid var(--primary); opacity: 0;
+        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+
+    @keyframes pulse-ring {
+        0% { transform: scale(0.8); opacity: 0.8; }
+        100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    .t-info { display: flex; flex-direction: column; justify-content: center; }
+
+    .t-label {
+        font-size: 12px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.5px;
+        white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+        color: #fff;
+    }
+
+    .t-connector {
+        width: 16px; height: 2px; background: rgba(255,255,255,0.1);
+        border-radius: 2px;
+    }
+
     /* TOASTS */
     .toast-container { 
-        position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); 
+        position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
         display: flex; flex-direction: column; gap: 10px; z-index: 200; pointer-events: none;
     }
     .toast { 
@@ -1019,6 +1287,31 @@ const GlobalCSS = () => (
     }
     .toast.success { border-color: #34d399; color: #34d399; }
     .toast.error { border-color: #f87171; color: #f87171; }
+
+    /* QUIZ STYLES */
+    .quiz-container { display: flex; flex-direction: column; gap: 20px; }
+    .quiz-progress { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--secondary); font-weight: 700; }
+    .quiz-question { font-size: 22px; color: #fff; margin: 0; font-family: 'Inter', sans-serif; font-weight: 600; }
+    .quiz-options { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+    .quiz-option {
+        background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
+        padding: 16px; border-radius: 8px; color: #d1d5db; text-align: left; cursor: pointer;
+        transition: 0.2s; font-size: 15px; position: relative;
+    }
+    .quiz-option:hover:not(:disabled) { background: rgba(255,255,255,0.1); transform: translateX(5px); }
+    .quiz-option.correct { background: rgba(52, 211, 153, 0.2); border-color: rgba(52, 211, 153, 0.5); color: #34d399; }
+    .quiz-option.wrong { background: rgba(248, 113, 113, 0.2); border-color: rgba(248, 113, 113, 0.5); color: #f87171; }
+    .quiz-explanation { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 8px; border-left: 3px solid var(--primary); margin-top: 10px; font-size: 14px; line-height: 1.6; }
+    .next-btn { display: block; margin-top: 15px; background: var(--primary); border: none; padding: 10px 20px; border-radius: 6px; color: #fff; font-weight: 600; cursor: pointer; float: right; }
+
+    .quiz-results { text-align: center; padding: 40px; }
+    .score-circle {
+        width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--primary);
+        display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto;
+        font-size: 32px; font-weight: 700; color: #fff;
+    }
+    .quiz-error { text-align: center; color: #f87171; }
+    .raw-content { background: #000; padding: 10px; border-radius: 4px; overflow-x: auto; text-align: left; margin-top: 10px; opacity: 0.7; }
   `}</style>
 );
 
