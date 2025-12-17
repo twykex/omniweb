@@ -44,35 +44,65 @@ def robust_json_parser(text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
 
-    # Strategy: Find the first '{' or '[' and the last '}' or ']'
     start_obj = text.find('{')
     start_arr = text.find('[')
 
-    start = -1
-    is_object = False
+    if start_obj == -1 and start_arr == -1:
+        return text
 
+    start = -1
     if start_obj != -1 and start_arr != -1:
-        if start_obj < start_arr:
-            start = start_obj
-            is_object = True
-        else:
-            start = start_arr
-            is_object = False
+        start = min(start_obj, start_arr)
     elif start_obj != -1:
         start = start_obj
-        is_object = True
-    elif start_arr != -1:
+    else:
         start = start_arr
-        is_object = False
 
+    stack = []
+    in_string = False
+    escape = False
+
+    for i in range(start, len(text)):
+        char = text[i]
+
+        if escape:
+            escape = False
+            continue
+
+        if char == '\\':
+            escape = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            continue
+
+        if not in_string:
+            if char == '{':
+                stack.append('{')
+            elif char == '[':
+                stack.append('[')
+            elif char == '}':
+                if stack and stack[-1] == '{':
+                    stack.pop()
+                    if not stack:
+                        return text[start:i+1]
+            elif char == ']':
+                if stack and stack[-1] == '[':
+                    stack.pop()
+                    if not stack:
+                        return text[start:i+1]
+
+    # Fallback: if we didn't find a clean end, revert to the "last brace" strategy as a last resort
     if start != -1:
+        is_object = text[start] == '{'
         if is_object:
             end = text.rfind('}') + 1
         else:
             end = text.rfind(']') + 1
 
         if end > start:
-            text = text[start:end]
+            return text[start:end]
 
     return text
 
