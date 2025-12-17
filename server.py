@@ -51,7 +51,7 @@ def get_models():
 @app.post("/random")
 def random_topic(req: RandomTopicRequest):
     print("\n🎲 Generating Random Topic...")
-    prompt = "Give me one interesting, specific educational topic to learn about (e.g. 'The Library of Alexandria', 'Quantum Entanglement', 'The Silk Road'). Return ONLY the topic name as a string. No quotes, no intro."
+    prompt = "Generate ONE specific, engaging educational topic for a curious learner. It could be from history, science, philosophy, or technology. Avoid generic broad topics like 'Science' or 'History'. Aim for something specific like 'The Library of Alexandria', 'CRISPR Gene Editing', 'Stoicism', or 'The Antikythera Mechanism'. Return ONLY the topic name. No quotes, no extra text."
 
     payload = {
         "model": req.model,
@@ -80,24 +80,34 @@ def expand_node(req: ExpandRequest):
 
     exclusion_text = ""
     if req.recent_nodes:
-        exclusion_text = f"4. AVOID using these words/topics: {', '.join(req.recent_nodes)}"
+        exclusion_text = f"5. AVOID using these words/topics: {', '.join(req.recent_nodes)}"
 
     system_prompt_template = """
     You are an Expert Curriculum Designer.
-    Current Subject: {node}
-    Full Context Path: {context}
 
-    TASK: Identify 5 distinct learning paths or sub-topics for a student studying "{node}".
-    IMPORTANT: The sub-topics must be directly related to "{node}" specifically within the context of "{context}". Ensure the progression is logical and hierarchical.
+    Current Subject: {node}
+    Context Path: {context}
+
+    Your goal is to identify 5 distinct sub-topics or learning paths that drill down into "{node}".
+    These sub-topics must be strictly hierarchical children of "{node}", assuming the user has already studied the parent topics in the context path.
 
     RULES:
-    1. "name": Clear, academic terminology (Max 4 words). Title Case.
-    2. "desc": A specific definition. (Max 20 words).
-    3. "status": "concept" (theory), "entity" (person/place/thing), or "process" (action/verb).
+    1. Output MUST be valid, parseable JSON.
+    2. Do not include any introductory text, markdown formatting, or code blocks. Just the raw JSON string.
+    3. The JSON root must be an object with a single key "children" containing a list of objects.
+    4. Each child object must have:
+        - "name": Concise academic title (max 4 words).
+        - "desc": Brief definition (max 20 words).
+        - "status": One of ["concept", "entity", "process"].
     {exclusion}
 
-    OUTPUT JSON:
-    {{ "children": [ {{ "name": "Topic Name", "desc": "Definition.", "status": "concept" }} ] }}
+    Example Output:
+    {{
+        "children": [
+            {{ "name": "Subtopic Name", "desc": "Brief description.", "status": "concept" }},
+            ...
+        ]
+    }}
     """
 
     system_prompt = system_prompt_template.format(
@@ -193,14 +203,23 @@ def analyze_node(req: AnalysisRequest):
 
     if req.mode == "history":
         system_prompt = f"""
+        You are a Historian.
+
         Context: {req.context}
         Topic: {req.node}
-        Task: {prompts.get(req.mode)}
 
-        CRITICAL: The events must be strictly relevant to the provided Context path.
+        Task: Create a historical timeline of key events for "{req.node}", considering the context "{req.context}".
 
-        Output format: Pure JSON Array. No Markdown. Do not use code blocks.
-        Example: [{{ "year": "1905", "title": "Special Relativity", "description": "Einstein publishes his paper..." }}]
+        Requirements:
+        1. Return ONLY a valid JSON Array.
+        2. Do NOT use markdown code blocks (```json ... ```).
+        3. Do NOT include any text before or after the JSON.
+        4. Each element in the array must be an object with "year" (string), "title" (string), and "description" (string).
+
+        Example:
+        [
+            {{ "year": "1905", "title": "Special Relativity", "description": "Einstein publishes his paper..." }}
+        ]
         """
     elif req.mode == "quiz":
         difficulty_guidance = {
@@ -210,36 +229,45 @@ def analyze_node(req: AnalysisRequest):
         }.get(req.difficulty, "Focus on conceptual understanding.")
 
         system_prompt = f"""
+        You are a Professor creating an exam.
+
         Context: {req.context}
         Topic: {req.node}
-        Task: {prompts.get(req.mode)}
+        Difficulty: {req.difficulty}
 
-        CRITICAL: The questions must be based on the intersection of the Topic and the Context.
+        Task: Create a {req.num_questions}-question multiple choice quiz.
+
+        Requirements:
+        1. Return ONLY valid JSON.
+        2. Do NOT use markdown code blocks.
+        3. The root object must have a key "questions" containing a list of question objects.
+        4. Each question object must have:
+           - "question": The question text.
+           - "options": An array of exactly 4 strings.
+           - "correct_index": Integer (0-3).
+           - "explanation": Brief explanation of the answer.
 
         Difficulty Guidance: {difficulty_guidance}
-
-        Style: Engaging, Professor-like, Clear.
-        Format: JSON only. Do not use Markdown code blocks.
         """
     else:
         system_prompt = f"""
+        You are an Expert Tutor.
+
         Context: {req.context}
         Topic: {req.node}
         Task: {prompts.get(req.mode)}
 
-        CRITICAL: All explanations and content must be strictly framed within the provided Context. If the Topic is ambiguous, resolve it by using the Context.
+        Guidelines:
+        - All explanations must be strictly framed within the provided Context.
+        - Style: Engaging, clear, and educational.
+        - Use Markdown for structure: headers (#, ##), bold (**), lists (-).
+        - Do NOT simply dump information; teach the concept.
 
-        Style: Engaging, Professor-like, Clear.
-        Format: Markdown with headers (#, ##), bolding (**), and lists (-).
-        
         VISUAL AIDS:
-        If a diagram or image would significantly improve understanding (e.g., complex anatomy, mechanical systems, or specific scientific cycles), insert a tag on a new line in the format: 
+        If a specific diagram or image would help (e.g., anatomy, maps, blueprints), insert a tag on its own line:
+        [Image of <specific search query>]
 
-[Image of <query>]
-.
-        - Use sparingly: Only trigger an image if it adds instructional value.
-        - Be specific in the query inside the brackets.
-        - Place the tag immediately before or after the relevant explanation.
+        Use this sparingly and only when necessary.
         """
 
     payload = {
