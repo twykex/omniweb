@@ -22,6 +22,7 @@ jest.mock('framer-motion', () => ({
     div: ({ children, ...props }) => <div {...props}>{children}</div>,
     h1: ({ children, ...props }) => <h1 {...props}>{children}</h1>,
     p: ({ children, ...props }) => <p {...props}>{children}</p>,
+    button: ({ children, ...props }) => <button {...props}>{children}</button>,
   },
   AnimatePresence: ({ children }) => <>{children}</>,
 }));
@@ -45,7 +46,9 @@ describe('App Integration', () => {
     render(<App />);
 
     // Check for hero title
-    expect(await screen.findByText(/Omni/i)).toBeInTheDocument();
+    expect(await screen.findByText((content, element) => {
+      return element.tagName.toLowerCase() === 'h1' && content.includes('Omni');
+    })).toBeInTheDocument();
     expect(screen.getByText(/The Infinite Learning Engine/i)).toBeInTheDocument();
 
     // Check for search input (Updated placeholder from Redesign branch)

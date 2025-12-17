@@ -13,14 +13,23 @@ jest.mock('react-markdown', () => ({
 }));
 
 // Mock Framer Motion
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }) => <div {...props}>{children}</div>,
-    h1: ({ children, ...props }) => <h1 {...props}>{children}</h1>,
-    p: ({ children, ...props }) => <p {...props}>{children}</p>,
-  },
-  AnimatePresence: ({ children }) => <>{children}</>,
-}));
+jest.mock('framer-motion', () => {
+  const React = require('react');
+  const filterProps = (props) => {
+    const { layoutId, layout, initial, animate, exit, variants, transition, onHoverStart, onHoverEnd, whileHover, whileTap, ...validProps } = props;
+    return validProps;
+  };
+
+  return {
+    motion: {
+      div: ({ children, ...props }) => <div {...filterProps(props)}>{children}</div>,
+      h1: ({ children, ...props }) => <h1 {...filterProps(props)}>{children}</h1>,
+      p: ({ children, ...props }) => <p {...filterProps(props)}>{children}</p>,
+      button: ({ children, ...props }) => <button {...filterProps(props)}>{children}</button>,
+    },
+    AnimatePresence: ({ children }) => <>{children}</>,
+  };
+});
 
 // Mock TextEncoder/TextDecoder for JSDOM if missing
 if (typeof TextEncoder === 'undefined') {
