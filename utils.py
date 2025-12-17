@@ -118,10 +118,57 @@ def get_gpu_vram():
 
 def get_available_models_list():
     try:
-        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
+        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=5)
         if res.status_code == 200:
             data = res.json()
             return [m['name'] for m in data['models']]
         return []
     except Exception:
         return []
+
+def filter_children_response(data, recent_nodes):
+    """
+    Validates and filters the JSON response for children nodes.
+    Handles both dict format {"children": [...]} and direct list format [...].
+    Filters out duplicates and forbidden (recent) nodes.
+    """
+    # Handle list input by wrapping it
+    if isinstance(data, list):
+        data = {"children": data}
+
+    if not data or not isinstance(data, dict) or "children" not in data or not data["children"]:
+        return None
+
+    # Check for Forbidden Topics and Duplicates
+    lower_recent = {n.lower() for n in recent_nodes} if recent_nodes else set()
+    seen_names = set()
+    valid_children = []
+
+    # Ensure data["children"] is actually a list
+    if not isinstance(data["children"], list):
+        return None
+
+    for child in data["children"]:
+        if not isinstance(child, dict):
+            continue
+
+        name = child.get("name", "")
+        if not name:
+            continue
+        name_lower = name.lower()
+
+        if name_lower in lower_recent:
+            print(f"Found forbidden topic: {name}")
+            continue
+        if name_lower in seen_names:
+            print(f"Found duplicate topic in response: {name}")
+            continue
+
+        seen_names.add(name_lower)
+        valid_children.append(child)
+
+    if not valid_children:
+        return None
+
+    data["children"] = valid_children
+    return data

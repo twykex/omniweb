@@ -4,7 +4,7 @@ import sys
 
 # CONFIG
 OLLAMA_URL = "http://localhost:11434"
-MODEL = "gpt-oss:120b"
+MODEL = "llama3"  # Default recommendation, but will auto-detect
 
 
 def print_status(step, status, message):
@@ -28,13 +28,20 @@ def check_ollama():
         response = requests.get(f"{OLLAMA_URL}/api/tags")
         models = [m['name'] for m in response.json()['models']]
 
-        # Handle tags (gpt-oss:120b vs gpt-oss:120b-latest)
-        if any(MODEL in m for m in models):
-            print_status("MODEL", True, f"Found model: {MODEL}")
+        # Check if ANY model exists if specific one is not found
+        found_model = next((m for m in models if MODEL in m), None)
+
+        if found_model:
+            print_status("MODEL", True, f"Found model: {found_model}")
+            # Update MODEL to the one we found for inference test
+            global MODEL
+            MODEL = found_model
+        elif models:
+            print_status("MODEL", True, f"Target '{MODEL}' not found, but found '{models[0]}'. Using that.")
+            MODEL = models[0]
         else:
-            print_status("MODEL", False, f"Model '{MODEL}' not found.")
-            print(f"   Available models: {models}")
-            print(f"   FIX: Run 'ollama pull {MODEL}' in terminal.")
+            print_status("MODEL", False, f"No models found.")
+            print(f"   FIX: Run 'ollama pull llama3' (or any other model) in terminal.")
             return
     except Exception as e:
         print_status("MODEL", False, f"Failed to list models: {e}")
