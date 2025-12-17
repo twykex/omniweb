@@ -92,6 +92,15 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   const [isThinking, setIsThinking] = useState(false);
   const scrollRef = useRef(null);
   const endRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
+  const closeLesson = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setLessonData(null);
+  };
 
   useEffect(() => {
     if (endRef.current) {
@@ -105,7 +114,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        if (lessonData) setLessonData(null);
+        if (lessonData) closeLesson();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -123,11 +132,22 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     setIsThinking(true);
     try {
       const contextPath = newCols.map(c => c.selectedNode).filter(Boolean).join(" > ");
+
+      // Gather recent nodes (current level + previous level)
+      const recentNodes = [];
+      if (columns[colIndex]) {
+        columns[colIndex].nodes.forEach(n => recentNodes.push(n.name));
+      }
+      if (colIndex > 0 && columns[colIndex - 1]) {
+        columns[colIndex - 1].nodes.forEach(n => recentNodes.push(n.name));
+      }
+
       const res = await axios.post(`${BASE_URL}/expand`, {
         node: node.name,
         context: contextPath,
         model: model,
-        temperature: 0.5
+        temperature: 0.5,
+        recent_nodes: recentNodes
       });
 
       if (res.data.children && res.data.children.length > 0) {
@@ -144,21 +164,64 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   };
 
   const openLesson = async (nodeName, mode) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setAnalyzingNode(nodeName);
-    setLessonData({ content: null, mode: mode, isLoading: true });
+    setLessonData({ content: "", mode: mode, isLoading: true });
 
     try {
       const contextPath = columns.map(c => c.selectedNode).filter(Boolean).join(" > ");
-      const res = await axios.post(`${BASE_URL}/analyze`, {
-        node: nodeName,
-        context: contextPath,
-        model: model,
-        mode: mode
+      const response = await fetch(`${BASE_URL}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          node: nodeName,
+          context: contextPath,
+          model: model,
+          mode: mode
+        }),
+        signal: controller.signal
       });
-      setLessonData({ content: res.data.content, mode: mode, isLoading: false });
+
+      if (!response.body) throw new Error("No response body");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          setLessonData(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              content: prev.content + chunk,
+              isLoading: false
+            };
+          });
+        }
+      }
+      setLessonData(prev => prev ? { ...prev, isLoading: false } : null);
+
     } catch (err) {
-      setLessonData({ content: "Connection lost.", mode: mode, isLoading: false });
-      addToast("Failed to load lesson", "error");
+      if (err.name === 'AbortError') {
+        console.log('Lesson generation aborted');
+      } else {
+        console.error(err);
+        setLessonData({ content: "Connection lost.", mode: mode, isLoading: false });
+        addToast("Failed to load lesson", "error");
+      }
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
   };
 
@@ -236,7 +299,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
             <motion.div
                 className="lesson-backdrop"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                onClick={() => setLessonData(null)}
+                onClick={closeLesson}
             />
             <motion.div
                 className="lesson-panel"
@@ -250,7 +313,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 </div>
 
                 <div className="panel-tabs">
-                    {['explain', 'history', 'impact', 'eli5', 'future', 'quiz'].map(m => (
+                    {['explain', 'history', 'impact', 'eli5', 'quiz'].map(m => (
                         <button
                             key={m}
                             className={lessonData.mode === m ? 'active' : ''}
@@ -286,7 +349,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         navigator.clipboard.writeText(lessonData.content);
                         addToast("Lesson text copied to clipboard", "success");
                     }}>COPY TEXT</button>
-                    <button onClick={() => setLessonData(null)}>CLOSE</button>
+                    <button onClick={closeLesson}>CLOSE</button>
                 </div>
             </motion.div>
           </>
@@ -323,12 +386,11 @@ const NodeCard = ({ node, isActive, onClick, onAction }) => {
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <ActionButton label="Explain" onClick={() => onAction('explain')} />
-            <ActionButton label="History" onClick={() => onAction('history')} />
-            <ActionButton label="Impact" onClick={() => onAction('impact')} />
-            <ActionButton label="ELI5" onClick={() => onAction('eli5')} />
-            <ActionButton label="Future" onClick={() => onAction('future')} />
-            <ActionButton label="Quiz" onClick={() => onAction('quiz')} />
+            <ActionButton icon={<Icons.Explain />} label="Explain" onClick={() => onAction('explain')} />
+            <ActionButton icon={<Icons.History />} label="History" onClick={() => onAction('history')} />
+            <ActionButton icon={<Icons.Impact />} label="Impact" onClick={() => onAction('impact')} />
+            <ActionButton icon={<Icons.ELI5 />} label="ELI5" onClick={() => onAction('eli5')} />
+            <ActionButton icon={<Icons.Quiz />} label="Quiz" onClick={() => onAction('quiz')} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -338,11 +400,47 @@ const NodeCard = ({ node, isActive, onClick, onAction }) => {
   );
 };
 
-const ActionButton = ({ label, onClick }) => (
+const ActionButton = ({ label, icon, onClick }) => (
     <button className="action-btn" onClick={(e) => { e.stopPropagation(); onClick(); }}>
-        {label}
+        <span className="btn-icon">{icon}</span>
+        <span className="btn-label">{label}</span>
     </button>
 );
+
+const Icons = {
+  Explain: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"></path>
+      <path d="M9 21h6"></path>
+    </svg>
+  ),
+  History: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <polyline points="12 6 12 12 16 14"></polyline>
+    </svg>
+  ),
+  Impact: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+    </svg>
+  ),
+  ELI5: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+      <line x1="9" y1="9" x2="9.01" y2="9"></line>
+      <line x1="15" y1="9" x2="15.01" y2="9"></line>
+    </svg>
+  ),
+  Quiz: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+      <line x1="12" y1="17" x2="12.01" y2="17"></line>
+    </svg>
+  )
+};
 
 const SkeletonColumn = () => (
     <div className="column">
@@ -612,13 +710,28 @@ const GlobalCSS = () => (
     .node-name { font-size: 20px; font-weight: 500; margin-bottom: 6px; color: #fff; letter-spacing: -0.3px; }
     .node-desc { font-size: 15px; color: var(--text-muted); line-height: 1.5; font-weight: 300; }
 
-    .node-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; overflow: hidden; position: relative; z-index: 2; }
+    .node-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 24px; position: relative; z-index: 2; }
+    .node-actions .action-btn:last-child { grid-column: span 2; }
+
     .action-btn {
-        flex: 1 1 30%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-        color: #e5e7eb; padding: 10px 0; border-radius: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
-        cursor: pointer; transition: 0.2s;
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+        color: var(--text-muted); padding: 12px 0; border-radius: 10px;
+        font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+        cursor: pointer; transition: all 0.2s ease;
+        backdrop-filter: blur(5px);
     }
-    .action-btn:hover { background: #fff; color: #000; }
+    .action-btn:hover {
+        background: rgba(255,255,255,0.1);
+        border-color: rgba(255,255,255,0.2);
+        color: #fff;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .action-btn:active { transform: translateY(0); }
+
+    .btn-icon { display: flex; align-items: center; opacity: 0.7; }
+    .action-btn:hover .btn-icon { opacity: 1; color: var(--primary); }
 
     .active-glow {
         position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--primary);

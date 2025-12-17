@@ -5,8 +5,10 @@ import subprocess
 import shutil
 import platform
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import List, Optional
 
 OLLAMA_BASE = "http://localhost:11434"
 
@@ -25,6 +27,7 @@ class ExpandRequest(BaseModel):
     context: str
     model: str
     temperature: float
+    recent_nodes: List[str] = []
 
 
 class AnalysisRequest(BaseModel):
@@ -71,8 +74,21 @@ def get_gpu_vram():
     return None
 
 
+def get_available_models_list():
+    # Helper to just return list of names (used internally for fallback logic)
+    try:
+        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
+        if res.status_code == 200:
+            data = res.json()
+            return [m['name'] for m in data['models']]
+        return []
+    except:
+        return []
+
+
 @app.get("/models")
 def get_models():
+    # Helper to return detailed model info for the frontend
     vram = get_gpu_vram()
     try:
         res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
@@ -113,35 +129,81 @@ def expand_node(req: ExpandRequest):
     context_parts = req.context.split(" > ")
     short_context = " > ".join(context_parts[-4:])
 
-    system_prompt = f"""
-    You are an Expert Curriculum Designer.
-    Current Subject: {req.node} (Context: {short_context})
+    # Prepare exclusion instructions
+    exclusion_text = ""
+    if req.recent_nodes:
+        exclusion_text = f"4. AVOID using these words/topics: {', '.join(req.recent_nodes)}"
 
-    TASK: Identify 5 distinct learning paths or sub-topics for a student studying "{req.node}".
+    system_prompt_template = """
+    You are an Expert Curriculum Designer.
+    Current Subject: {node} (Context: {context})
+
+    TASK: Identify 5 distinct learning paths or sub-topics for a student studying "{node}".
 
     RULES:
     1. "name": Clear, academic terminology (Max 4 words). Title Case.
     2. "desc": A specific definition. (Max 20 words).
     3. "status": "concept" (theory), "entity" (person/place/thing), or "process" (action/verb).
+    {exclusion}
 
     OUTPUT JSON:
     {{ "children": [ {{ "name": "Topic Name", "desc": "Definition.", "status": "concept" }} ] }}
     """
 
-    payload = {
-        "model": req.model,
-        "prompt": system_prompt,
-        "stream": False,
-        "options": {"temperature": 0.4, "num_ctx": 4096}
-    }
+    system_prompt = system_prompt_template.format(
+        node=req.node,
+        context=short_context,
+        exclusion=exclusion_text
+    )
 
-    try:
-        response = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=60)
-        data = json.loads(robust_json_parser(response.json().get("response", "")))
+    def call_llm(model, prompt):
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0.4, "num_ctx": 4096}
+        }
+        try:
+            response = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=60)
+            json_text = robust_json_parser(response.json().get("response", ""))
+            return json.loads(json_text)
+        except Exception as e:
+            print(f"Error calling {model}: {e}")
+            return None
+
+    # First attempt
+    data = call_llm(req.model, system_prompt)
+
+    # Validation and Fallback Logic
+    def is_valid(data, recent_nodes):
+        if not data or "children" not in data or not data["children"]:
+            return False
+        # Check for Forbidden Topics
+        if recent_nodes:
+            lower_recent = {n.lower() for n in recent_nodes}
+            for child in data["children"]:
+                if child["name"].lower() in lower_recent:
+                    print(f"Found forbidden topic: {child['name']}")
+                    return False
+        return True
+
+    if is_valid(data, req.recent_nodes):
         return data
-    except Exception as e:
-        print(f"Error: {e}")
-        return {"children": []}
+
+    print("⚠️ Primary model failed or returned repeat topics. Attempting fallback...")
+
+    # Try fallback model
+    available_models = get_available_models_list()
+    fallback_model = next((m for m in available_models if m != req.model), None)
+
+    if fallback_model:
+        print(f"🔄 Switching to fallback model: {fallback_model}")
+        data = call_llm(fallback_model, system_prompt)
+        if is_valid(data, req.recent_nodes):
+            return data
+
+    # If all fails, return empty or whatever we got (better to return empty if invalid)
+    return {"children": []}
 
 
 @app.post("/analyze")
@@ -169,12 +231,24 @@ def analyze_node(req: AnalysisRequest):
     payload = {
         "model": req.model,
         "prompt": system_prompt,
-        "stream": False,
+        "stream": True,
         "options": {"temperature": 0.6}
     }
 
-    try:
-        response = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=120)
-        return {"content": response.json().get("response", "Lesson generation failed.")}
-    except Exception as e:
-        return {"content": f"Error: {str(e)}"}
+    def generate():
+        try:
+            with requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, stream=True, timeout=120) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if line:
+                        try:
+                            json_obj = json.loads(line.decode('utf-8'))
+                            chunk = json_obj.get("response", "")
+                            if chunk:
+                                yield chunk
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as e:
+            yield f"Error: {str(e)}"
+
+    return StreamingResponse(generate(), media_type="text/plain")
