@@ -202,6 +202,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
     const currentSeen = col.seenNodes || col.nodes.map(n => n.name);
     const parentSiblings = columns[colIndex - 1].nodes.map(n => n.name);
+    // Explicitly aggregate all seen nodes to ensure backend avoids reusing them
     const avoidList = [...new Set([...currentSeen, ...parentSiblings, parentNodeName])];
 
     setIsThinking(true);
@@ -373,9 +374,10 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 <button
                   className="regenerate-btn"
                   onClick={() => handleRegenerate(colIdx)}
-                  title="Regenerate with new topics"
+                  title="Regenerate with new topics (avoids duplicates)"
+                  data-testid="regenerate-btn"
                 >
-                  ↻
+                   ↻ REGENERATE
                 </button>
               )}
             </div>
@@ -1261,10 +1263,15 @@ const GlobalCSS = () => (
       letter-spacing: 1.5px; opacity: 0.6; display: flex; justify-content: space-between; align-items: center;
     }
     .regenerate-btn {
-      background: none; border: none; color: var(--text-muted); cursor: pointer;
-      font-size: 14px; transition: color 0.2s; padding: 0; line-height: 1;
+      background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
+      color: var(--text-muted); cursor: pointer;
+      font-size: 10px; transition: all 0.2s; padding: 6px 10px; line-height: 1; border-radius: 4px;
+      display: flex; align-items: center; gap: 6px; font-weight: 700; letter-spacing: 0.5px;
     }
-    .regenerate-btn:hover { color: var(--primary); }
+    .regenerate-btn:hover {
+        color: var(--primary); border-color: var(--primary);
+        background: rgba(139, 92, 246, 0.1);
+    }
     .node-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 100px; }
 
     /* NODE CARDS */
