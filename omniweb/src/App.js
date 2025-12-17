@@ -174,7 +174,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     } finally { setIsThinking(false); }
   };
 
-  const openLesson = async (nodeName, mode) => {
+  const openLesson = async (nodeName, mode, quizConfig = null) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -182,7 +182,13 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     abortControllerRef.current = controller;
 
     setAnalyzingNode(nodeName);
-    setLessonData({ content: "", mode: mode, isLoading: true });
+
+    if (mode === 'quiz' && !quizConfig) {
+        setLessonData({ mode: 'quiz', stage: 'config' });
+        return;
+    }
+
+    setLessonData({ content: "", mode: mode, isLoading: true, stage: 'loading', quizConfig });
 
     try {
       const contextPath = columns.map(c => c.selectedNode).filter(Boolean).join(" > ");
@@ -195,7 +201,9 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
           node: nodeName,
           context: contextPath,
           model: model,
-          mode: mode
+          mode: mode,
+          difficulty: quizConfig?.difficulty,
+          num_questions: quizConfig?.numQuestions
         }),
         signal: controller.signal
       });
@@ -350,7 +358,9 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                 </div>
 
                 <div className="panel-content custom-scroll">
-                {lessonData.isLoading || (lessonData.mode === 'quiz' && !lessonData.isComplete) ? (
+                {lessonData.stage === 'config' ? (
+                    <QuizConfig onStart={(cfg) => openLesson(analyzingNode, 'quiz', cfg)} />
+                ) : (lessonData.isLoading || (lessonData.mode === 'quiz' && !lessonData.isComplete) ? (
                     <div className="text-skeleton">
                         <div className="sk-line w-75"></div>
                         <div className="sk-line w-100"></div>
@@ -359,11 +369,11 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         <br/>
                         <div className="sk-line w-100"></div>
                         <div className="sk-line w-75"></div>
-                        {lessonData.mode === 'quiz' && <div style={{textAlign: 'center', marginTop: 20, color: 'var(--secondary)', fontWeight: 'bold', fontSize: '12px', letterSpacing: '1px'}}>GENERATING QUIZ...</div>}
+                        {lessonData.mode === 'quiz' && <div style={{textAlign: 'center', marginTop: 20, color: 'var(--secondary)', fontWeight: 'bold', fontSize: '12px', letterSpacing: '1px'}}>GENERATING QUIZ ({lessonData.quizConfig?.difficulty || 'medium'})...</div>}
                     </div>
                 ) : (
                     lessonData.mode === 'quiz' ? (
-                        <QuizInterface content={lessonData.content} />
+                        <QuizInterface content={lessonData.content} quizConfig={lessonData.quizConfig} />
                     ) : (
                     <ReactMarkdown components={{
                         blockquote: ({node, ...props}) => <div className="quote-box" {...props} />
@@ -371,7 +381,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         {processedContent}
                     </ReactMarkdown>
                     )
-                )}
+                ))}
                 </div>
 
                 <div className="panel-footer">
@@ -535,7 +545,48 @@ const ToastContainer = ({ toasts }) => (
 
 // --- COMPONENT MERGES (Redesign + Functionality) ---
 
-const QuizInterface = ({ content }) => {
+const QuizConfig = ({ onStart }) => {
+  const [difficulty, setDifficulty] = useState("medium");
+  const [numQuestions, setNumQuestions] = useState(5);
+
+  return (
+    <div className="quiz-config">
+      <h3>Configure Quiz</h3>
+      <div className="config-grid">
+          <div className="config-item">
+            <label>Difficulty</label>
+            <div className="segmented-control">
+              {['easy', 'medium', 'hard'].map(d => (
+                <button
+                  key={d}
+                  className={difficulty === d ? 'active' : ''}
+                  onClick={() => setDifficulty(d)}
+                >
+                  {d.charAt(0).toUpperCase() + d.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="config-item">
+            <label>Questions: {numQuestions}</label>
+            <input
+              type="range" min="3" max="10" step="1"
+              value={numQuestions}
+              onChange={(e) => setNumQuestions(parseInt(e.target.value))}
+              className="range-slider"
+            />
+          </div>
+      </div>
+
+      <button className="start-quiz-btn" onClick={() => onStart({ difficulty, numQuestions })}>
+        START QUIZ
+      </button>
+    </div>
+  );
+};
+
+const QuizInterface = ({ content, quizConfig }) => {
   const [quizData, setQuizData] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
@@ -543,6 +594,7 @@ const QuizInterface = ({ content }) => {
   const [showResult, setShowResult] = useState(false);
   const [quizFinished, setQuizFinished] = useState(false);
   const [parseError, setParseError] = useState(false);
+  const [userAnswers, setUserAnswers] = useState([]); // Store answers for review
 
   useEffect(() => {
     try {
@@ -570,9 +622,11 @@ const QuizInterface = ({ content }) => {
   const handleOptionClick = (index) => {
     if (selectedOption !== null) return;
     setSelectedOption(index);
-    if (index === quizData.questions[currentQuestion].correct_index) {
+    const isCorrect = index === quizData.questions[currentQuestion].correct_index;
+    if (isCorrect) {
         setScore(score + 1);
     }
+    setUserAnswers([...userAnswers, { questionIndex: currentQuestion, selected: index, correct: isCorrect }]);
     setShowResult(true);
   };
 
@@ -602,19 +656,45 @@ const QuizInterface = ({ content }) => {
   if (!quizData) return <div className="quiz-loading">Loading Quiz...</div>;
 
   if (quizFinished) {
+      const percentage = Math.round((score / quizData.questions.length) * 100);
       return (
           <div className="quiz-results">
               <h3>Quiz Completed!</h3>
-              <div className="score-circle">
-                  <span className="score-num">{Math.round((score / quizData.questions.length) * 100)}%</span>
+              <div className="score-circle" style={{ borderColor: percentage >= 70 ? '#34d399' : '#f87171' }}>
+                  <span className="score-num">{percentage}%</span>
               </div>
               <p>You got {score} out of {quizData.questions.length} correct.</p>
+
+              <div className="results-review">
+                  <h4>Review</h4>
+                  {quizData.questions.map((q, i) => {
+                      const ans = userAnswers.find(a => a.questionIndex === i);
+                      return (
+                          <div key={i} className={`review-item ${ans?.correct ? 'correct' : 'wrong'}`}>
+                              <div className="review-q">{i+1}. {q.question}</div>
+                              <div className="review-ans">
+                                  {ans?.correct ? (
+                                      <span style={{color:'#34d399'}}>✓ Correct</span>
+                                  ) : (
+                                      <>
+                                          <span style={{color:'#f87171'}}>✗ You chose: {q.options[ans?.selected]}</span>
+                                          <br/>
+                                          <span style={{color:'#34d399'}}>✓ Correct: {q.options[q.correct_index]}</span>
+                                      </>
+                                  )}
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+
               <button onClick={() => {
                   setScore(0);
                   setCurrentQuestion(0);
                   setQuizFinished(false);
                   setSelectedOption(null);
                   setShowResult(false);
+                  setUserAnswers([]);
               }} className="retry-btn" style={{marginTop: '20px'}}>RETRY</button>
           </div>
       );
@@ -624,34 +704,54 @@ const QuizInterface = ({ content }) => {
 
   return (
       <div className="quiz-container">
-          <div className="quiz-progress">
+          <div className="quiz-progress-bar">
+              <div className="progress-fill" style={{width: `${((currentQuestion) / quizData.questions.length) * 100}%`}}></div>
+          </div>
+          <div className="quiz-progress-text">
               Question {currentQuestion + 1} of {quizData.questions.length}
           </div>
-          <h3 className="quiz-question">{question.question}</h3>
-          <div className="quiz-options">
-              {question.options.map((opt, idx) => (
-                  <button
-                    key={idx}
-                    className={`quiz-option ${selectedOption === idx ? (idx === question.correct_index ? 'correct' : 'wrong') : ''} ${showResult && idx === question.correct_index ? 'correct' : ''}`}
-                    onClick={() => handleOptionClick(idx)}
-                    disabled={selectedOption !== null}
-                  >
-                      {opt}
-                      {selectedOption === idx && (idx === question.correct_index ? ' ✓' : ' ✗')}
-                  </button>
-              ))}
-          </div>
-          {showResult && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="quiz-explanation"
-              >
-                  <strong>Explanation:</strong> {question.explanation}
-                  <button className="next-btn" onClick={nextQuestion}>
-                      {currentQuestion + 1 < quizData.questions.length ? "Next Question" : "See Results"}
-                  </button>
-              </motion.div>
-          )}
+
+          <AnimatePresence mode="wait">
+            <motion.div
+                key={currentQuestion}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3 }}
+            >
+                <h3 className="quiz-question">{question.question}</h3>
+                <div className="quiz-options">
+                    {question.options.map((opt, idx) => (
+                        <button
+                            key={idx}
+                            className={`quiz-option ${selectedOption === idx ? (idx === question.correct_index ? 'correct' : 'wrong') : ''} ${showResult && idx === question.correct_index ? 'correct' : ''}`}
+                            onClick={() => handleOptionClick(idx)}
+                            disabled={selectedOption !== null}
+                        >
+                            <span className="opt-letter">{String.fromCharCode(65+idx)}</span>
+                            {opt}
+                            {selectedOption === idx && (idx === question.correct_index ? ' ✓' : ' ✗')}
+                        </button>
+                    ))}
+                </div>
+            </motion.div>
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showResult && (
+                <motion.div
+                    initial={{ opacity: 0, y: 10, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="quiz-explanation"
+                >
+                    <strong>Explanation:</strong> {question.explanation}
+                    <button className="next-btn" onClick={nextQuestion}>
+                        {currentQuestion + 1 < quizData.questions.length ? "Next Question" : "See Results"}
+                    </button>
+                </motion.div>
+            )}
+          </AnimatePresence>
       </div>
   );
 };
@@ -1219,6 +1319,36 @@ const GlobalCSS = () => (
     }
     .quiz-error { text-align: center; color: #f87171; }
     .raw-content { background: #000; padding: 10px; border-radius: 4px; overflow-x: auto; text-align: left; margin-top: 10px; opacity: 0.7; }
+
+    /* QUIZ NEW STYLES */
+    .quiz-config { text-align: center; padding: 20px; }
+    .quiz-config h3 { font-family: 'Playfair Display', serif; font-size: 32px; color: #fff; margin-bottom: 40px; }
+    .config-grid { display: flex; flex-direction: column; gap: 30px; margin-bottom: 40px; }
+    .config-item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .config-item label { font-size: 11px; font-weight: 700; color: var(--secondary); letter-spacing: 1px; text-transform: uppercase; }
+
+    .segmented-control { display: flex; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 4px; gap: 4px; }
+    .segmented-control button { flex: 1; background: transparent; border: none; padding: 8px 16px; color: var(--text-muted); font-size: 12px; cursor: pointer; border-radius: 6px; transition: 0.2s; font-weight: 500; }
+    .segmented-control button:hover { color: #fff; }
+    .segmented-control button.active { background: var(--primary); color: #fff; }
+
+    .range-slider { width: 100%; max-width: 200px; accent-color: var(--primary); }
+
+    .start-quiz-btn { background: #fff; color: #000; border: none; padding: 14px 40px; font-size: 14px; font-weight: 700; border-radius: 50px; cursor: pointer; transition: 0.2s; letter-spacing: 1px; }
+    .start-quiz-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,255,255,0.3); }
+
+    .quiz-progress-bar { width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-bottom: 10px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--primary); transition: width 0.3s ease; }
+    .quiz-progress-text { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 15px; }
+
+    .opt-letter { display: inline-block; width: 24px; height: 24px; background: rgba(255,255,255,0.1); border-radius: 50%; text-align: center; line-height: 24px; font-size: 11px; margin-right: 12px; font-weight: 700; color: #fff; }
+    .quiz-option:hover .opt-letter { background: #fff; color: #000; }
+
+    .results-review { margin-top: 30px; text-align: left; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 12px; max-height: 300px; overflow-y: auto; }
+    .results-review h4 { margin-top: 0; font-size: 14px; color: var(--secondary); text-transform: uppercase; letter-spacing: 1px; }
+    .review-item { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .review-q { font-size: 14px; color: #fff; margin-bottom: 6px; font-weight: 500; }
+    .review-ans { font-size: 12px; font-family: monospace; }
   `}</style>
 );
 
