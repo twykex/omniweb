@@ -40,6 +40,10 @@ class AnalysisRequest(BaseModel):
     num_questions: Optional[int] = 3
 
 
+class RandomTopicRequest(BaseModel):
+    model: str
+
+
 def robust_json_parser(text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
@@ -192,6 +196,29 @@ def get_models():
         return {"models": []}
 
 
+@app.post("/random")
+def random_topic(req: RandomTopicRequest):
+    print("\n🎲 Generating Random Topic...")
+    prompt = "Give me one interesting, specific educational topic to learn about (e.g. 'The Library of Alexandria', 'Quantum Entanglement', 'The Silk Road'). Return ONLY the topic name as a string. No quotes, no intro."
+
+    payload = {
+        "model": req.model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 1.0}
+    }
+
+    try:
+        res = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=30)
+        if res.status_code == 200:
+            topic = res.json().get("response", "").strip().replace('"', '')
+            return {"topic": topic}
+    except Exception as e:
+        print(f"Error generating random topic: {e}")
+
+    return {"topic": "The Universe"}
+
+
 @app.post("/expand")
 def expand_node(req: ExpandRequest):
     print(f"\n⚡ Expanding Topic: [{req.node}]")
@@ -291,6 +318,9 @@ def analyze_node(req: AnalysisRequest):
         "impact": f"Analyze the significance of '{req.node}'. Why does it matter to humanity or the universe? What are the ethical or practical implications?",
         "eli5": f"Explain '{req.node}' to a 5-year-old. Use simple words and fun examples.",
         "future": f"Speculate on the future of '{req.node}'. What advances or changes can we expect in the next 50 years?",
+        "code": f"Provide a code example or technical demonstration related to '{req.node}'. If it is a programming concept, show code. If it is a scientific concept, show a formula or a simulation algorithm. Use proper markdown code blocks.",
+        "proscons": f"Analyze the Pros and Cons of '{req.node}'. Present them in a clear Markdown table or list.",
+        "debate": f"Simulate a short debate between two experts holding opposing views on '{req.node}'. Label them as 'Proponent' and 'Skeptic'.",
         "quiz": f"Create a {req.num_questions}-question multiple choice quiz about '{req.node}'. Difficulty: {req.difficulty}. Return ONLY valid JSON. The JSON should be an object with a key 'questions' which is a list of objects. Each question object must have: 'question' (string), 'options' (list of 4 strings), 'correct_index' (integer 0-3), and 'explanation' (string). Do not use markdown formatting."
     }
 
