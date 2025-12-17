@@ -73,6 +73,9 @@ describe('App Integration', () => {
 
     // Verify the initial node is present
     expect(screen.getByText('Quantum Physics')).toBeInTheDocument();
+
+    // Verify timeline bar is present
+    expect(screen.getByText('START')).toBeInTheDocument();
   });
 
   test('shows backend offline message when API fails', async () => {

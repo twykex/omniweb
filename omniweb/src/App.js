@@ -242,6 +242,15 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
       }
   };
 
+  const jumpToLevel = (index) => {
+    if (isThinking) return;
+    if (index === columns.length - 1) return;
+
+    const newCols = columns.slice(0, index + 1);
+    newCols[index] = { ...newCols[index], selectedNode: null };
+    setColumns(newCols);
+  };
+
   const readingTime = lessonData && lessonData.content && lessonData.content.trim() ? Math.ceil(lessonData.content.split(/\s+/).length / 200) : 0;
 
   const processedContent = lessonData?.content || "";
@@ -304,6 +313,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
         {isThinking && <SkeletonColumn />}
         <div ref={endRef} style={{minWidth: "60px", height: "100%"}} />
       </div>
+
+      <TimelineBar columns={columns} onJump={jumpToLevel} />
 
       <AnimatePresence>
         {lessonData && (
@@ -372,6 +383,32 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 };
 
 // --- SUB COMPONENTS ---
+
+const TimelineBar = ({ columns, onJump }) => {
+  return (
+    <div className="timeline-container">
+      <div className="timeline-track custom-scroll">
+        {columns.map((col, i) => {
+          const isLast = i === columns.length - 1;
+          const label = i === 0 ? "START" : columns[i - 1].selectedNode;
+
+          return (
+            <div
+              key={i}
+              className={`timeline-node ${isLast ? 'current' : ''}`}
+              onClick={() => onJump(i)}
+              title={isLast ? "Current Level" : `Go back to Level ${i + 1}`}
+            >
+              <div className="t-dot">{i + 1}</div>
+              <div className="t-label">{label}</div>
+              {!isLast && <div className="t-line"></div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const NodeCard = ({ node, isActive, onClick, onAction }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -867,7 +904,7 @@ const GlobalCSS = () => (
 
     .column { min-width: var(--col-width); width: var(--col-width); display: flex; flex-direction: column; }
     .column-header { font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 16px; letter-spacing: 1.5px; opacity: 0.6; }
-    .node-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 50px; }
+    .node-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 100px; }
 
     /* NODE CARDS */
     .node-card { 
@@ -962,9 +999,63 @@ const GlobalCSS = () => (
     .w-100 { width: 100%; } .w-75 { width: 75%; } .w-50 { width: 50%; }
     @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 0.6; } 100% { opacity: 0.3; } }
 
+    /* TIMELINE */
+    .timeline-container {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        height: 80px; background: rgba(5, 5, 7, 0.9);
+        border-top: 1px solid var(--glass-border);
+        backdrop-filter: blur(20px);
+        z-index: 50;
+        display: flex; align-items: center; justify-content: center;
+    }
+
+    .timeline-track {
+        display: flex; align-items: center;
+        gap: 0;
+        overflow-x: auto;
+        padding: 0 40px;
+        max-width: 100%;
+    }
+    .timeline-track::-webkit-scrollbar { height: 0; }
+
+    .timeline-node {
+        display: flex; align-items: center;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: 0.3s;
+        position: relative;
+    }
+
+    .timeline-node:hover { opacity: 1; }
+    .timeline-node.current { opacity: 1; color: var(--primary); }
+
+    .t-dot {
+        width: 24px; height: 24px; border-radius: 50%;
+        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 10px; font-weight: 700;
+        transition: 0.3s;
+    }
+    .timeline-node.current .t-dot {
+        background: var(--primary); color: #fff; border-color: var(--primary);
+        box-shadow: 0 0 15px var(--primary);
+    }
+
+    .t-label {
+        margin-left: 10px; font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 1px;
+        white-space: nowrap;
+        max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .t-line {
+        width: 40px; height: 1px; background: rgba(255,255,255,0.2);
+        margin: 0 15px;
+    }
+
     /* TOASTS */
     .toast-container { 
-        position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); 
+        position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
         display: flex; flex-direction: column; gap: 10px; z-index: 200; pointer-events: none;
     }
     .toast { 
