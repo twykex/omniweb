@@ -104,7 +104,7 @@ export const QuizInterface = ({ content, quizConfig, onNewQuiz }) => {
                }
           }
 
-          if (!parsedData) {
+          if (!parsedData && start !== -1) {
                const fallbackEnd = jsonStr.lastIndexOf('}') + 1;
                if (fallbackEnd > start) {
                     try {
