@@ -50,6 +50,7 @@ describe('App Integration', () => {
     jest.clearAllMocks();
     // Default success mock
     axios.get.mockResolvedValue({ data: { models: [{ name: 'llama3', fits: true }] } });
+    axios.post.mockResolvedValue({ data: { children: [] } });
   });
 
   test('renders landing page initially', async () => {
@@ -83,7 +84,7 @@ describe('App Integration', () => {
     expect(await screen.findByText(/LEVEL 1/i)).toBeInTheDocument();
 
     // Verify the initial node is present
-    expect(screen.getByText('Quantum Physics')).toBeInTheDocument();
+    expect(screen.getAllByText('Quantum Physics').length).toBeGreaterThan(0);
 
     // Verify timeline bar is present
     expect(screen.getByText('HOME')).toBeInTheDocument();

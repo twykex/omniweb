@@ -94,10 +94,7 @@ describe('Quiz Integration', () => {
         fireEvent.click(screen.getByText('➜'));
 
         // Wait for workspace
-        const node = await screen.findByText('Math');
-
-        // Click node to activate it and show actions
-        fireEvent.click(node);
+        await waitFor(() => expect(screen.getAllByText('Math').length).toBeGreaterThan(0));
 
         // Click Quiz action
         const quizBtn = await screen.findByText('Quiz');
