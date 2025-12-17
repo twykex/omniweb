@@ -136,7 +136,7 @@ describe('Quiz Integration', () => {
         expect(screen.getByText('You got 1 out of 1 correct.')).toBeInTheDocument();
 
         // Retry
-        fireEvent.click(screen.getByText('RETRY'));
+        fireEvent.click(screen.getByText('RETRY SAME QUESTIONS'));
         expect(screen.getByText('What is 2+2?')).toBeInTheDocument();
     });
 });

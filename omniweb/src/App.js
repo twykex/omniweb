@@ -135,7 +135,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   useEffect(() => {
     if (endRef.current) {
       setTimeout(() => {
-        if (endRef.current.scrollIntoView) {
+        if (endRef.current && endRef.current.scrollIntoView) {
             endRef.current.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
         }
       }, 100);
@@ -740,17 +740,51 @@ const QuizInterface = ({ content, quizConfig, onNewQuiz }) => {
       let jsonStr = content.trim();
       jsonStr = jsonStr.replace(/```json/gi, "").replace(/```/g, "");
       const start = jsonStr.indexOf('{');
-      const end = jsonStr.lastIndexOf('}') + 1;
-      if (start !== -1 && end !== -1) {
-          jsonStr = jsonStr.substring(start, end);
-          const data = JSON.parse(jsonStr);
-          if (data && data.questions) {
-              setQuizData(data);
-          } else {
-              setParseError(true);
+
+      let parsedData = null;
+
+      if (start !== -1) {
+          let stack = 0;
+          let end = -1;
+          let inString = false;
+          for (let i = start; i < jsonStr.length; i++) {
+              const char = jsonStr[i];
+              if (char === '"' && jsonStr[i-1] !== '\\') inString = !inString;
+              if (!inString) {
+                  if (char === '{') stack++;
+                  else if (char === '}') {
+                      stack--;
+                      if (stack === 0) {
+                          end = i + 1;
+                          break;
+                      }
+                  }
+              }
           }
+
+          if (end !== -1) {
+               try {
+                   parsedData = JSON.parse(jsonStr.substring(start, end));
+               } catch(err) {
+                   console.warn("Robust parse failed, trying fallback", err);
+               }
+          }
+
+          if (!parsedData) {
+               const fallbackEnd = jsonStr.lastIndexOf('}') + 1;
+               if (fallbackEnd > start) {
+                    try {
+                        parsedData = JSON.parse(jsonStr.substring(start, fallbackEnd));
+                    } catch(err) {}
+               }
+          }
+      }
+
+      if (parsedData && parsedData.questions) {
+          setQuizData(parsedData);
+          setParseError(false);
       } else {
-           setParseError(true);
+          setParseError(true);
       }
     } catch (e) {
       console.error("Quiz parse error", e);
