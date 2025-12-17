@@ -386,26 +386,45 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
 const TimelineBar = ({ columns, onJump }) => {
   return (
-    <div className="timeline-container">
-      <div className="timeline-track custom-scroll">
-        {columns.map((col, i) => {
-          const isLast = i === columns.length - 1;
-          const label = i === 0 ? "START" : columns[i - 1].selectedNode;
+    <div className="timeline-wrapper">
+      <motion.div
+        className="timeline-container"
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 120, damping: 15 }}
+      >
+        <div className="timeline-track custom-scroll">
+          {columns.map((col, i) => {
+            const isLast = i === columns.length - 1;
+            const label = i === 0 ? "HOME" : columns[i - 1].selectedNode;
 
-          return (
-            <div
-              key={i}
-              className={`timeline-node ${isLast ? 'current' : ''}`}
-              onClick={() => onJump(i)}
-              title={isLast ? "Current Level" : `Go back to Level ${i + 1}`}
-            >
-              <div className="t-dot">{i + 1}</div>
-              <div className="t-label">{label}</div>
-              {!isLast && <div className="t-line"></div>}
-            </div>
-          );
-        })}
-      </div>
+            return (
+              <React.Fragment key={i}>
+                <motion.div
+                  className={`timeline-node ${isLast ? 'current' : 'past'}`}
+                  onClick={() => onJump(i)}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  title={isLast ? "Current View" : `Jump to ${label}`}
+                >
+                  <div className="t-dot">
+                     {i === 0 ? (
+                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                     ) : (
+                       <span>{i + 1}</span>
+                     )}
+                     {isLast && <motion.div layoutId="pulse" className="t-pulse" />}
+                  </div>
+                  <div className="t-info">
+                    <span className="t-label">{label}</span>
+                  </div>
+                </motion.div>
+                {!isLast && <div className="t-connector" />}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </motion.div>
     </div>
   );
 };
@@ -1000,57 +1019,87 @@ const GlobalCSS = () => (
     @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 0.6; } 100% { opacity: 0.3; } }
 
     /* TIMELINE */
+    .timeline-wrapper {
+        position: fixed; bottom: 30px; left: 0; right: 0;
+        display: flex; justify-content: center; z-index: 50;
+        pointer-events: none;
+    }
+
     .timeline-container {
-        position: fixed; bottom: 0; left: 0; right: 0;
-        height: 80px; background: rgba(5, 5, 7, 0.9);
-        border-top: 1px solid var(--glass-border);
+        pointer-events: auto;
+        height: auto;
+        background: rgba(15, 15, 20, 0.85);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 100px;
         backdrop-filter: blur(20px);
-        z-index: 50;
+        padding: 8px 10px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.2);
         display: flex; align-items: center; justify-content: center;
+        max-width: 90%;
     }
 
     .timeline-track {
         display: flex; align-items: center;
-        gap: 0;
+        gap: 6px;
         overflow-x: auto;
-        padding: 0 40px;
+        padding: 4px 10px;
         max-width: 100%;
+        scrollbar-width: none;
     }
-    .timeline-track::-webkit-scrollbar { height: 0; }
+    .timeline-track::-webkit-scrollbar { display: none; }
 
     .timeline-node {
         display: flex; align-items: center;
         cursor: pointer;
-        opacity: 0.5;
+        opacity: 0.6;
         transition: 0.3s;
         position: relative;
+        padding: 6px 12px 6px 6px;
+        border-radius: 50px;
+        background: transparent;
+        border: 1px solid transparent;
+        gap: 10px;
     }
 
-    .timeline-node:hover { opacity: 1; }
-    .timeline-node.current { opacity: 1; color: var(--primary); }
+    .timeline-node:hover { opacity: 1; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+    .timeline-node.current { opacity: 1; background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.3); padding-right: 16px; }
 
     .t-dot {
-        width: 24px; height: 24px; border-radius: 50%;
-        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+        width: 32px; height: 32px; border-radius: 50%;
+        background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
         display: flex; align-items: center; justify-content: center;
-        font-size: 10px; font-weight: 700;
-        transition: 0.3s;
+        font-size: 11px; font-weight: 700; color: #fff;
+        position: relative;
+        flex-shrink: 0;
     }
     .timeline-node.current .t-dot {
-        background: var(--primary); color: #fff; border-color: var(--primary);
-        box-shadow: 0 0 15px var(--primary);
+        background: var(--primary); border-color: var(--primary);
+        box-shadow: 0 0 15px rgba(139, 92, 246, 0.5);
     }
+
+    .t-pulse {
+        position: absolute; inset: -4px; border-radius: 50%;
+        border: 2px solid var(--primary); opacity: 0;
+        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+
+    @keyframes pulse-ring {
+        0% { transform: scale(0.8); opacity: 0.8; }
+        100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    .t-info { display: flex; flex-direction: column; justify-content: center; }
 
     .t-label {
-        margin-left: 10px; font-size: 11px; font-weight: 600;
-        text-transform: uppercase; letter-spacing: 1px;
-        white-space: nowrap;
-        max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+        font-size: 12px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.5px;
+        white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+        color: #fff;
     }
 
-    .t-line {
-        width: 40px; height: 1px; background: rgba(255,255,255,0.2);
-        margin: 0 15px;
+    .t-connector {
+        width: 16px; height: 2px; background: rgba(255,255,255,0.1);
+        border-radius: 2px;
     }
 
     /* TOASTS */
