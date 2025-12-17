@@ -143,6 +143,39 @@ def get_models():
         return {"models": []}
 
 
+def filter_and_validate_children(data, recent_nodes):
+    if not data or "children" not in data or not data["children"]:
+        return None
+
+    # Check for Forbidden Topics and Duplicates
+    lower_recent = {n.lower() for n in recent_nodes} if recent_nodes else set()
+    seen_names = set()
+    valid_children = []
+
+    for child in data["children"]:
+        if "name" not in child:
+            continue
+
+        name_lower = child["name"].lower()
+
+        if name_lower in lower_recent:
+            print(f"Skipping forbidden topic: {child['name']}")
+            continue
+
+        if name_lower in seen_names:
+            print(f"Skipping duplicate topic in response: {child['name']}")
+            continue
+
+        seen_names.add(name_lower)
+        valid_children.append(child)
+
+    if not valid_children:
+        return None
+
+    data["children"] = valid_children
+    return data
+
+
 @app.post("/expand")
 def expand_node(req: ExpandRequest):
     print(f"\n⚡ Expanding Topic: [{req.node}]")
@@ -194,28 +227,9 @@ def expand_node(req: ExpandRequest):
 
     data = call_llm(req.model, system_prompt)
 
-    def is_valid(data, recent_nodes):
-        if not data or "children" not in data or not data["children"]:
-            return False
-
-        # Check for Forbidden Topics and Duplicates
-        lower_recent = {n.lower() for n in recent_nodes} if recent_nodes else set()
-        seen_names = set()
-
-        for child in data["children"]:
-            name_lower = child["name"].lower()
-            if name_lower in lower_recent:
-                print(f"Found forbidden topic: {child['name']}")
-                return False
-            if name_lower in seen_names:
-                print(f"Found duplicate topic in response: {child['name']}")
-                return False
-            seen_names.add(name_lower)
-
-        return True
-
-    if is_valid(data, req.recent_nodes):
-        return data
+    filtered_data = filter_and_validate_children(data, req.recent_nodes)
+    if filtered_data:
+        return filtered_data
 
     print("⚠️ Primary model failed or returned repeat topics. Attempting fallback...")
 
@@ -226,8 +240,9 @@ def expand_node(req: ExpandRequest):
     for fallback_model in fallback_candidates:
         print(f"🔄 Switching to fallback model: {fallback_model}")
         data = call_llm(fallback_model, system_prompt)
-        if is_valid(data, req.recent_nodes):
-            return data
+        filtered_data = filter_and_validate_children(data, req.recent_nodes)
+        if filtered_data:
+            return filtered_data
 
     return {"children": []}
 

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { HistoryTimeline } from "./HistoryTimeline";
 
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 // Suggested topics from Main branch
 const SUGGESTED_TOPICS = ["Neural Networks", "The Renaissance", "Mars Colonization", "Jazz History"];
