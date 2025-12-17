@@ -44,9 +44,11 @@ def robust_json_parser(text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
 
+    # Find the first brace/bracket
     start_obj = text.find('{')
     start_arr = text.find('[')
 
+    # Early exit if no JSON structure is found
     if start_obj == -1 and start_arr == -1:
         return text
 
@@ -55,7 +57,7 @@ def robust_json_parser(text):
         start = min(start_obj, start_arr)
     elif start_obj != -1:
         start = start_obj
-    else:
+    elif start_arr != -1:
         start = start_arr
 
     stack = []
@@ -95,11 +97,20 @@ def robust_json_parser(text):
 
     # Fallback: if we didn't find a clean end, revert to the "last brace" strategy as a last resort
     if start != -1:
-        is_object = text[start] == '{'
-        if is_object:
-            end = text.rfind('}') + 1
-        else:
-            end = text.rfind(']') + 1
+        try:
+            # Attempt to parse one valid JSON object starting from 'start'
+            # raw_decode returns (obj, end_index)
+            _, end = json.JSONDecoder().raw_decode(text, idx=start)
+            return text[start:end]
+        except json.JSONDecodeError:
+            pass
+
+    # Fallback to simple extraction if robust parsing fails
+    # This might return invalid JSON if multiple objects exist, but it's a best effort
+    if start != -1:
+        end_obj = text.rfind('}') + 1
+        end_arr = text.rfind(']') + 1
+        end = max(end_obj, end_arr)
 
         if end > start:
             return text[start:end]
@@ -107,7 +118,13 @@ def robust_json_parser(text):
     return text
 
 
+_GPU_VRAM_CACHE = None
+
 def get_gpu_vram():
+    global _GPU_VRAM_CACHE
+    if _GPU_VRAM_CACHE is not None:
+        return _GPU_VRAM_CACHE
+
     try:
         # Check for NVIDIA GPU via nvidia-smi
         if shutil.which("nvidia-smi"):
@@ -119,12 +136,14 @@ def get_gpu_vram():
             lines = output.strip().split('\n')
             if lines:
                 total_mib = int(lines[0]) # Use first GPU
-                return total_mib * 1024 * 1024
+                _GPU_VRAM_CACHE = total_mib * 1024 * 1024
+                return _GPU_VRAM_CACHE
 
         if platform.system() == "Darwin":
             output = subprocess.check_output(["sysctl", "-n", "hw.memsize"], encoding="utf-8", timeout=5)
             total_mem = int(output.strip())
-            return int(total_mem * 0.75)
+            _GPU_VRAM_CACHE = int(total_mem * 0.75)
+            return _GPU_VRAM_CACHE
 
     except Exception:
         pass
@@ -311,7 +330,10 @@ def analyze_node(req: AnalysisRequest):
         Format: Markdown with headers (#, ##), bolding (**), and lists (-).
         
         VISUAL AIDS:
-        If a diagram or image would significantly improve understanding (e.g., complex anatomy, mechanical systems, or specific scientific cycles), insert a tag on a new line in the format: [Image of <query>].
+        If a diagram or image would significantly improve understanding (e.g., complex anatomy, mechanical systems, or specific scientific cycles), insert a tag on a new line in the format: 
+
+[Image of <query>]
+.
         - Use sparingly: Only trigger an image if it adds instructional value.
         - Be specific in the query inside the brackets.
         - Place the tag immediately before or after the relevant explanation.
