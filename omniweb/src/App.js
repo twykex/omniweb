@@ -123,6 +123,11 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   const scrollRef = useRef(null);
   const endRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const lessonDataRef = useRef(lessonData);
+
+  useEffect(() => {
+    lessonDataRef.current = lessonData;
+  }, [lessonData]);
 
   const closeLesson = () => {
     if (abortControllerRef.current) {
@@ -146,12 +151,12 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        if (lessonData) closeLesson();
+        if (lessonDataRef.current) closeLesson();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [lessonData]);
+  }, []);
 
   const handleNodeClick = async (colIndex, node) => {
     if (columns[colIndex].selectedNode === node.name) return;

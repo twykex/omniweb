@@ -44,40 +44,46 @@ def robust_json_parser(text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
 
-    # Strategy: Find the first '{' or '[' and the last '}' or ']'
+    # Find the first brace/bracket
     start_obj = text.find('{')
     start_arr = text.find('[')
 
     start = -1
-    is_object = False
-
     if start_obj != -1 and start_arr != -1:
-        if start_obj < start_arr:
-            start = start_obj
-            is_object = True
-        else:
-            start = start_arr
-            is_object = False
+        start = min(start_obj, start_arr)
     elif start_obj != -1:
         start = start_obj
-        is_object = True
     elif start_arr != -1:
         start = start_arr
-        is_object = False
 
     if start != -1:
-        if is_object:
-            end = text.rfind('}') + 1
-        else:
-            end = text.rfind(']') + 1
+        try:
+            # Attempt to parse one valid JSON object starting from 'start'
+            # raw_decode returns (obj, end_index)
+            _, end = json.JSONDecoder().raw_decode(text, idx=start)
+            return text[start:end]
+        except json.JSONDecodeError:
+            pass
 
+    # Fallback to simple extraction if robust parsing fails
+    # This might return invalid JSON if multiple objects exist, but it's a best effort
+    if start != -1:
+        end_obj = text.rfind('}') + 1
+        end_arr = text.rfind(']') + 1
+        end = max(end_obj, end_arr)
         if end > start:
-            text = text[start:end]
+            return text[start:end]
 
     return text
 
 
+_GPU_VRAM_CACHE = None
+
 def get_gpu_vram():
+    global _GPU_VRAM_CACHE
+    if _GPU_VRAM_CACHE is not None:
+        return _GPU_VRAM_CACHE
+
     try:
         # Check for NVIDIA GPU via nvidia-smi
         if shutil.which("nvidia-smi"):
@@ -89,12 +95,14 @@ def get_gpu_vram():
             lines = output.strip().split('\n')
             if lines:
                 total_mib = int(lines[0]) # Use first GPU
-                return total_mib * 1024 * 1024
+                _GPU_VRAM_CACHE = total_mib * 1024 * 1024
+                return _GPU_VRAM_CACHE
 
         if platform.system() == "Darwin":
             output = subprocess.check_output(["sysctl", "-n", "hw.memsize"], encoding="utf-8", timeout=5)
             total_mem = int(output.strip())
-            return int(total_mem * 0.75)
+            _GPU_VRAM_CACHE = int(total_mem * 0.75)
+            return _GPU_VRAM_CACHE
 
     except Exception:
         pass
