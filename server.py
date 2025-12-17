@@ -40,6 +40,21 @@ class AnalysisRequest(BaseModel):
 def robust_json_parser(text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
+
+    # Attempt to find a valid JSON object using raw_decode
+    decoder = json.JSONDecoder()
+    pos = 0
+    while pos < len(text):
+        pos = text.find('{', pos)
+        if pos == -1:
+            break
+        try:
+            # obj is the parsed object, end is the index where parsing stopped
+            obj, end = decoder.raw_decode(text, idx=pos)
+            return text[pos:end]
+        except json.JSONDecodeError:
+            pos += 1
+
     start = text.find('{')
     end = text.rfind('}') + 1
     if start != -1 and end != -1:
@@ -121,6 +136,21 @@ def get_models():
         return {"models": []}
 
 
+def is_valid_expansion(data, recent_nodes):
+    if not data or "children" not in data or not data["children"]:
+        return False
+    # Check for Forbidden Topics
+    if recent_nodes:
+        lower_recent = {n.lower() for n in recent_nodes}
+        for child in data["children"]:
+            if "name" not in child:
+                continue
+            if child["name"].lower() in lower_recent:
+                print(f"Found forbidden topic: {child['name']}")
+                return False
+    return True
+
+
 @app.post("/expand")
 def expand_node(req: ExpandRequest):
     print(f"\n⚡ Expanding Topic: [{req.node}]")
@@ -175,19 +205,7 @@ def expand_node(req: ExpandRequest):
     data = call_llm(req.model, system_prompt)
 
     # Validation and Fallback Logic
-    def is_valid(data, recent_nodes):
-        if not data or "children" not in data or not data["children"]:
-            return False
-        # Check for Forbidden Topics
-        if recent_nodes:
-            lower_recent = {n.lower() for n in recent_nodes}
-            for child in data["children"]:
-                if child["name"].lower() in lower_recent:
-                    print(f"Found forbidden topic: {child['name']}")
-                    return False
-        return True
-
-    if is_valid(data, req.recent_nodes):
+    if is_valid_expansion(data, req.recent_nodes):
         return data
 
     print("⚠️ Primary model failed or returned repeat topics. Attempting fallback...")
@@ -199,7 +217,7 @@ def expand_node(req: ExpandRequest):
     if fallback_model:
         print(f"🔄 Switching to fallback model: {fallback_model}")
         data = call_llm(fallback_model, system_prompt)
-        if is_valid(data, req.recent_nodes):
+        if is_valid_expansion(data, req.recent_nodes):
             return data
 
     # If all fails, return empty or whatever we got (better to return empty if invalid)
