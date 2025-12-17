@@ -15,6 +15,7 @@ const App = () => {
   const [loadingModels, setLoadingModels] = useState(true);
   const [backendError, setBackendError] = useState(false);
   const [startTopic, setStartTopic] = useState("");
+  const [savedTopics, setSavedTopics] = useState([]);
   const [toasts, setToasts] = useState([]);
 
   const addToast = (msg, type = 'info') => {
@@ -71,6 +72,8 @@ const App = () => {
             key="workspace" 
             model={selectedModel}
             initialTopic={startTopic}
+            savedTopics={savedTopics}
+            setSavedTopics={setSavedTopics}
             onExit={() => setHasStarted(false)}
             addToast={addToast}
           />
@@ -93,13 +96,14 @@ const BackgroundEngine = () => (
 );
 
 // --- WORKSPACE COMPONENT ---
-const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
+const LearningWorkspace = ({ model, initialTopic, savedTopics, setSavedTopics, onExit, addToast }) => {
   const [columns, setColumns] = useState([{ 
     id: "root", 
     selectedNode: null, 
     nodes: [{ name: initialTopic, desc: "The starting point of your journey.", status: "concept" }] 
   }]);
 
+  const [activeView, setActiveView] = useState('explore'); // explore, saved
   const [lessonData, setLessonData] = useState(null);
   const [analyzingNode, setAnalyzingNode] = useState(null);
   const [isThinking, setIsThinking] = useState(false);
@@ -118,7 +122,9 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   useEffect(() => {
     if (endRef.current) {
       setTimeout(() => {
-        endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        if (endRef.current && typeof endRef.current.scrollIntoView === 'function') {
+          endRef.current.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        }
       }, 100);
     }
   }, [columns, isThinking]);
@@ -133,6 +139,28 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lessonData]);
+
+  const toggleSaveTopic = (node) => {
+    setSavedTopics(prev => {
+      const exists = prev.find(t => t.name === node.name);
+      if (exists) {
+        addToast("Topic removed from saved", "info");
+        return prev.filter(t => t.name !== node.name);
+      } else {
+        addToast("Topic saved!", "success");
+        return [...prev, { name: node.name, desc: node.desc, date: Date.now() }];
+      }
+    });
+  };
+
+  const loadTopic = (topic) => {
+    setColumns([{
+        id: "root",
+        selectedNode: null,
+        nodes: [{ name: topic.name, desc: topic.desc, status: "concept" }]
+    }]);
+    setActiveView('explore');
+  };
 
   const handleNodeClick = async (colIndex, node) => {
     if (columns[colIndex].selectedNode === node.name) return;
@@ -238,12 +266,6 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     }
   };
 
-  const handleBreadcrumbClick = (index) => {
-      if (index + 1 < columns.length) {
-          setColumns(columns.slice(0, index + 2));
-      }
-  };
-
   const jumpToLevel = (index) => {
     if (isThinking) return;
     if (index === columns.length - 1) return;
@@ -266,57 +288,71 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
         <div className="brand" onClick={onExit}>
           OMNI<span className="brand-thin">WEB</span>
         </div>
-        <div className="breadcrumbs">
-          {columns.map((col, i) => (
-             col.selectedNode && (
-               <React.Fragment key={i}>
-                 <span 
-                   className="crumb" 
-                   onClick={() => handleBreadcrumbClick(i)}
-                   style={{cursor: 'pointer'}}
-                   title="Navigate to this level"
-                 >
-                    {col.selectedNode}
-                 </span>
-                 <span className="sep">/</span>
-               </React.Fragment>
-             )
-          ))}
-        </div>
+
+        <nav className="top-nav">
+          <button
+            className={`nav-link ${activeView === 'explore' ? 'active' : ''}`}
+            onClick={() => setActiveView('explore')}
+          >
+            EXPLORE
+          </button>
+          <button
+            className={`nav-link ${activeView === 'saved' ? 'active' : ''}`}
+            onClick={() => setActiveView('saved')}
+          >
+            SAVED TOPICS
+          </button>
+        </nav>
+
         <button className="exit-icon-btn" onClick={onExit} title="Exit">✕</button>
       </header>
 
-      <div className="miller-columns-container" ref={scrollRef}>
-        {columns.map((col, colIdx) => (
-          <motion.div 
-            key={`${col.id}-${colIdx}`}
-            initial={{ opacity: 0, x: 50 }} 
-            animate={{ opacity: 1, x: 0 }} 
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="column"
-          >
-            <div className="column-header">
-              LEVEL {colIdx + 1}
-            </div>
-            <div className="node-list">
-              {col.nodes.map((node) => (
-                <NodeCard 
-                  key={node.name} 
-                  node={node} 
-                  isActive={col.selectedNode === node.name}
-                  onClick={() => handleNodeClick(colIdx, node)}
-                  onAction={(mode) => openLesson(node.name, mode)}
-                />
-              ))}
-            </div>
-          </motion.div>
-        ))}
-        
-        {isThinking && <SkeletonColumn />}
-        <div ref={endRef} style={{minWidth: "60px", height: "100%"}} />
-      </div>
+      {activeView === 'explore' ? (
+        <>
+          <div className="miller-columns-container" ref={scrollRef}>
+            {columns.map((col, colIdx) => (
+              <motion.div
+                key={`${col.id}-${colIdx}`}
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                className="column"
+              >
+                <div className="column-header">
+                  LEVEL {colIdx + 1}
+                </div>
+                <div className="node-list">
+                  {col.nodes.map((node) => (
+                    <NodeCard
+                      key={node.name}
+                      node={node}
+                      isActive={col.selectedNode === node.name}
+                      isSaved={savedTopics.some(t => t.name === node.name)}
+                      onToggleSave={() => toggleSaveTopic(node)}
+                      onClick={() => handleNodeClick(colIdx, node)}
+                      onAction={(mode) => openLesson(node.name, mode)}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            ))}
 
-      <TimelineBar columns={columns} onJump={jumpToLevel} />
+            {isThinking && <SkeletonColumn />}
+            <div ref={endRef} style={{minWidth: "60px", height: "100%"}} />
+          </div>
+
+          <TimelineBar columns={columns} onJump={jumpToLevel} />
+        </>
+      ) : (
+        <SavedTopicsView
+          savedTopics={savedTopics}
+          onLoad={loadTopic}
+          onRemove={(name) => {
+             setSavedTopics(savedTopics.filter(t => t.name !== name));
+             addToast("Removed from saved", "info");
+          }}
+        />
+      )}
 
       <AnimatePresence>
         {lessonData && (
@@ -436,7 +472,7 @@ const TimelineBar = ({ columns, onJump }) => {
   );
 };
 
-const NodeCard = ({ node, isActive, onClick, onAction }) => {
+const NodeCard = ({ node, isActive, isSaved, onToggleSave, onClick, onAction }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -448,7 +484,18 @@ const NodeCard = ({ node, isActive, onClick, onAction }) => {
       layout
     >
       <div className="node-content">
-        <div className="node-name">{node.name}</div>
+        <div className="node-header-row" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+            <div className="node-name">{node.name}</div>
+            {onToggleSave && (
+                <button
+                    className={`save-btn ${isSaved ? 'saved' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); onToggleSave(); }}
+                    title={isSaved ? "Unsave" : "Save for later"}
+                >
+                    {isSaved ? <Icons.Saved /> : <Icons.Save />}
+                </button>
+            )}
+        </div>
         <div className="node-desc">{node.desc}</div>
       </div>
 
@@ -482,7 +529,60 @@ const ActionButton = ({ label, icon, onClick }) => (
     </button>
 );
 
+const SavedTopicsView = ({ savedTopics, onLoad, onRemove }) => (
+    <div className="saved-view custom-scroll">
+        <div className="saved-header">
+            <h2>Saved Topics</h2>
+            <p>Your personal library of knowledge.</p>
+        </div>
+
+        {savedTopics.length === 0 ? (
+            <div className="empty-state">
+                <div className="empty-icon">📂</div>
+                <h3>No topics saved yet</h3>
+                <p>Click the bookmark icon on any card to save it here.</p>
+            </div>
+        ) : (
+            <div className="saved-grid">
+                {savedTopics.map((t, i) => (
+                    <motion.div
+                        key={i}
+                        className="saved-card"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        onClick={() => onLoad(t)}
+                    >
+                        <div className="saved-card-header">
+                            <h3>{t.name}</h3>
+                            <button
+                                className="remove-btn"
+                                onClick={(e) => { e.stopPropagation(); onRemove(t.name); }}
+                                title="Remove"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <p>{t.desc}</p>
+                        <div className="saved-meta">Saved {new Date(t.date).toLocaleDateString()}</div>
+                    </motion.div>
+                ))}
+            </div>
+        )}
+    </div>
+);
+
 const Icons = {
+  Save: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+    </svg>
+  ),
+  Saved: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+    </svg>
+  ),
   Explain: () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"></path>
@@ -1039,8 +1139,15 @@ const GlobalCSS = () => (
     .hud-header { height: 70px; display: flex; align-items: center; padding: 0 30px; border-bottom: 1px solid var(--glass-border); background: rgba(8, 8, 11, 0.6); backdrop-filter: blur(20px); z-index: 10; justify-content: space-between; }
     .brand { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 600; cursor: pointer; letter-spacing: -0.5px; }
     .brand-thin { font-family: 'Inter', sans-serif; font-weight: 300; opacity: 0.7; font-size: 20px; }
-    .breadcrumbs { flex: 1; margin: 0 40px; display: flex; gap: 8px; overflow: hidden; white-space: nowrap; mask-image: linear-gradient(90deg, #000 80%, transparent 100%); font-size: 13px; color: var(--text-muted); }
-    .crumb { color: #fff; font-weight: 500; }
+
+    .top-nav { flex: 1; display: flex; justify-content: center; gap: 20px; }
+    .nav-link {
+        background: transparent; border: none; color: var(--text-muted); font-size: 12px; font-weight: 600; letter-spacing: 1px;
+        padding: 8px 16px; border-radius: 20px; cursor: pointer; transition: 0.2s;
+    }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.05); }
+    .nav-link.active { color: #fff; background: rgba(255,255,255,0.1); }
+
     .exit-icon-btn { background: none; border: 1px solid var(--glass-border); color: var(--text-muted); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
     .exit-icon-btn:hover { background: #fff; color: #000; }
 
@@ -1070,6 +1177,13 @@ const GlobalCSS = () => (
     .node-content { position: relative; z-index: 2; }
     .node-name { font-size: 20px; font-weight: 500; margin-bottom: 6px; color: #fff; letter-spacing: -0.3px; }
     .node-desc { font-size: 15px; color: var(--text-muted); line-height: 1.5; font-weight: 300; }
+
+    .save-btn {
+        background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;
+        transition: 0.2s; opacity: 0.6;
+    }
+    .save-btn:hover { opacity: 1; transform: scale(1.1); color: #fff; }
+    .save-btn.saved { color: var(--primary); opacity: 1; }
 
     .node-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 24px; position: relative; z-index: 2; }
     .node-actions .action-btn:last-child { grid-column: span 2; }
@@ -1131,6 +1245,33 @@ const GlobalCSS = () => (
         background: rgba(139, 92, 246, 0.05); border-left: 3px solid var(--primary);
         padding: 24px; margin: 30px 0; font-style: italic; color: #e5e7eb; border-radius: 0 8px 8px 0;
     }
+
+    /* SAVED TOPICS VIEW */
+    .saved-view { padding: 40px; height: calc(100vh - 70px); box-sizing: border-box; overflow-y: auto; text-align: center; }
+    .saved-header { margin-bottom: 40px; }
+    .saved-header h2 { font-size: 32px; margin: 0; font-family: 'Playfair Display', serif; }
+    .saved-header p { color: var(--text-muted); margin-top: 10px; }
+
+    .saved-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
+    .saved-card {
+        background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 12px;
+        padding: 20px; text-align: left; cursor: pointer; transition: 0.2s; position: relative;
+    }
+    .saved-card:hover { background: rgba(255,255,255,0.06); transform: translateY(-4px); border-color: rgba(255,255,255,0.1); }
+    .saved-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .saved-card-header h3 { margin: 0; font-size: 18px; color: #fff; }
+    .saved-card p { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin: 0 0 15px 0; }
+    .saved-meta { font-size: 10px; color: var(--text-muted); opacity: 0.6; }
+
+    .remove-btn {
+        background: none; border: none; color: var(--text-muted); cursor: pointer;
+        font-size: 16px; opacity: 0; transition: 0.2s;
+    }
+    .saved-card:hover .remove-btn { opacity: 1; }
+    .remove-btn:hover { color: #f87171; }
+
+    .empty-state { margin-top: 100px; opacity: 0.5; }
+    .empty-icon { font-size: 48px; margin-bottom: 20px; }
 
 
     .panel-footer { padding: 20px 50px; border-top: 1px solid var(--glass-border); display: flex; justify-content: flex-end; gap: 12px; background: rgba(0,0,0,0.3); }
