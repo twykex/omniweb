@@ -2,19 +2,22 @@
 > omniweb@0.1.0 start
 > react-scripts start
 
-(node:1705) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:3465) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
 (Use `node --trace-deprecation ...` to show where the warning was created)
-(node:1705) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:3465) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
 Starting the development server...
 
-Compiled successfully!
+Compiled with warnings.
 
-You can now view omniweb in the browser.
+[eslint]
+src/App.js
+  Line 767:6:  React Hook useEffect has a missing dependency: 'handleOptionClick'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
 
-  Local:            http://localhost:3000
-  On Your Network:  http://192.168.0.2:3000
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
 
-Note that the development build is not optimized.
-To create a production build, use npm run build.
+WARNING in [eslint]
+src/App.js
+  Line 767:6:  React Hook useEffect has a missing dependency: 'handleOptionClick'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
 
-webpack compiled successfully
+webpack compiled with 1 warning
