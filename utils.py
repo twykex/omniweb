@@ -123,5 +123,5 @@ def get_available_models_list():
             data = res.json()
             return [m['name'] for m in data['models']]
         return []
-    except:
+    except Exception:
         return []
