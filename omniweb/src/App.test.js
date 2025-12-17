@@ -39,6 +39,8 @@ jest.mock('react-markdown', () => ({
 describe('App Integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    const axios = require('axios');
+    axios.get.mockResolvedValue({ data: { models: [{ name: 'llama3', fits: true }] } });
   });
 
   test('renders landing page initially', async () => {
@@ -73,6 +75,9 @@ describe('App Integration', () => {
 
     // Verify the initial node is present
     expect(screen.getByText('Quantum Physics')).toBeInTheDocument();
+
+    // Verify timeline bar is present
+    expect(screen.getByText('START')).toBeInTheDocument();
   });
 
   test('shows backend offline message when API fails', async () => {
