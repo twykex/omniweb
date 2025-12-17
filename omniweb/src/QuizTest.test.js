@@ -103,6 +103,10 @@ describe('Quiz Integration', () => {
         const quizBtn = await screen.findByText('Quiz');
         fireEvent.click(quizBtn);
 
+        // Wait for config and start
+        const startBtn = await screen.findByText('START QUIZ');
+        fireEvent.click(startBtn);
+
         // Expect loading state first
         // Note: The loading state might flicker very fast because our mock stream is instant.
         // But we should see "GENERATING QUIZ..." or the quiz content eventually.
