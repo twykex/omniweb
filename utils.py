@@ -130,7 +130,7 @@ def get_available_models_list():
         res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=5)
         if res.status_code == 200:
             data = res.json()
-            return [m['name'] for m in data['models']]
+            return [m.get('name') for m in data.get('models', []) if m.get('name')]
         return []
     except Exception:
         return []

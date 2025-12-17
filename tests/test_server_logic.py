@@ -81,5 +81,62 @@ class TestServerLogic(unittest.TestCase):
         self.assertEqual(len(data["children"]), 1)
         self.assertEqual(data["children"][0]["name"], "Subtopic List")
 
+    @patch('server.requests.get')
+    def test_get_models_missing_name(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        # One valid model, one missing name
+        mock_response.json.return_value = {
+            "models": [
+                {"name": "valid_model", "size": 100},
+                {"size": 200} # Missing name
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        response = client.get("/models")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data["models"]), 1)
+        self.assertEqual(data["models"][0]["name"], "valid_model")
+
+    @patch('server.requests.post')
+    def test_analyze_invalid_mode(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.iter_lines.return_value = [b'{"response": "chunk"}']
+        mock_post.return_value.__enter__.return_value = mock_response
+
+        # Request with invalid mode
+        response = client.post("/analyze", json={
+            "node": "Node", "context": "Ctx", "model": "m", "mode": "invalid_mode"
+        })
+        self.assertEqual(response.status_code, 200)
+
+        # Check that the prompt used corresponds to "explain"
+        call_args = mock_post.call_args
+        json_body = call_args[1]['json']
+        prompt = json_body['prompt']
+        self.assertIn("Teach 'Node' to a beginner", prompt) # "explain" prompt
+
+    @patch('server.requests.post')
+    def test_analyze_case_insensitive_mode(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.iter_lines.return_value = [b'{"response": "chunk"}']
+        mock_post.return_value.__enter__.return_value = mock_response
+
+        # Request with mixed case mode
+        response = client.post("/analyze", json={
+            "node": "Node", "context": "Ctx", "model": "m", "mode": "HiStOrY"
+        })
+        self.assertEqual(response.status_code, 200)
+
+        # Check that the prompt is history prompt
+        call_args = mock_post.call_args
+        json_body = call_args[1]['json']
+        prompt = json_body['prompt']
+        self.assertIn("You are a Historian", prompt)
+
 if __name__ == '__main__':
     unittest.main()
