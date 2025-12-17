@@ -5,7 +5,7 @@ import time
 import os
 import datetime
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Try to import from local modules, otherwise use defaults
 try:
@@ -24,7 +24,7 @@ except ImportError:
 
 # Configuration
 OUTPUT_BASE_DIR = "benchmark_results"
-TIMEOUT_SECONDS = 60
+TIMEOUT_SECONDS = 90  # Increased for potentially slower code generation/summarization
 
 # Test Prompts
 TEST_SUITE = [
@@ -60,7 +60,25 @@ TEST_SUITE = [
         "system": "You are a logician.",
         "prompt": "A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How much does the ball cost? Explain your reasoning step by step, then answer with 'Answer: $X.XX'.",
         "type": "text",
-        "validator": lambda x: "0.05" in x or "5 cents" in x
+        "validator": lambda x: "0.05" in x or "5 cents" in x or "$0.05" in x
+    },
+    {
+        "id": "code_python",
+        "name": "Python Coding",
+        "system": "You are a Python expert.",
+        "prompt": "Write a Python function named `calculate_factorial` that takes an integer `n` and returns the factorial of `n`. Return ONLY the code.",
+        "type": "text",
+        "validator": lambda x: "def calculate_factorial" in x and "return" in x
+    },
+    {
+        "id": "summarization",
+        "name": "Summarization",
+        "system": "You are a helpful assistant.",
+        "prompt": """Summarize the following text in exactly one sentence:
+        The Internet is a global system of interconnected computer networks that uses the Internet protocol suite (TCP/IP) to communicate between networks and devices. It is a network of networks that consists of private, public, academic, business, and government networks of local to global scope, linked by a broad array of electronic, wireless, and optical networking technologies. The Internet carries a vast range of information resources and services, such as the inter-linked hypertext documents and applications of the World Wide Web (WWW), electronic mail, telephony, and file sharing.
+        """,
+        "type": "text",
+        "validator": lambda x: len(x.strip()) > 10 and len(x.strip()) < 500
     }
 ]
 
@@ -103,27 +121,39 @@ def run_test(model: str, test: Dict[str, Any]) -> Dict[str, Any]:
         duration = end_time - start_time
 
         if res.status_code == 200:
-            response_text = res.json().get("response", "")
+            data = res.json()
+            response_text = data.get("response", "")
+            eval_count = data.get("eval_count", 0)
+            eval_duration = data.get("eval_duration", 0) # in nanoseconds
+
+            tokens_per_second = 0
+            if eval_duration > 0:
+                tokens_per_second = eval_count / (eval_duration / 1e9)
 
             # Validation
             passed = False
+            error_msg = None
 
             if test['type'] == 'json':
                 json_text = robust_json_parser(response_text)
                 try:
                     json.loads(json_text)
                     passed = True
-                except:
+                except json.JSONDecodeError as e:
                     passed = False
+                    error_msg = f"JSON Error: {str(e)}"
             elif test.get('validator'):
                 try:
                     passed = test['validator'](response_text)
-                except Exception:
+                    if not passed:
+                        error_msg = "Validator returned False"
+                except Exception as e:
                     passed = False
+                    error_msg = f"Validator Error: {str(e)}"
             else:
                 passed = True # No validation, just completion
 
-            print(f" Done ({duration:.2f}s) [{'Pass' if passed else 'Fail'}]")
+            print(f" Done ({duration:.2f}s, {tokens_per_second:.1f} t/s) [{'Pass' if passed else 'Fail'}]")
 
             return {
                 "test_id": test['id'],
@@ -131,7 +161,9 @@ def run_test(model: str, test: Dict[str, Any]) -> Dict[str, Any]:
                 "duration": duration,
                 "response": response_text,
                 "passed": passed,
-                "error": None
+                "tokens_per_second": tokens_per_second,
+                "eval_count": eval_count,
+                "error": error_msg
             }
         else:
             print(f" Error (HTTP {res.status_code})")
@@ -141,6 +173,8 @@ def run_test(model: str, test: Dict[str, Any]) -> Dict[str, Any]:
                 "duration": 0,
                 "response": None,
                 "passed": False,
+                "tokens_per_second": 0,
+                "eval_count": 0,
                 "error": f"HTTP {res.status_code}: {res.text}"
             }
 
@@ -152,50 +186,56 @@ def run_test(model: str, test: Dict[str, Any]) -> Dict[str, Any]:
             "duration": 0,
             "response": None,
             "passed": False,
+            "tokens_per_second": 0,
+            "eval_count": 0,
             "error": str(e)
         }
 
-def analyze_results(results: Dict[str, List[Dict]], timestamp: str):
-    print("\n" + "="*50)
+def analyze_results(results: Dict[str, List[Dict]], timestamp: str) -> List[tuple]:
+    print("\n" + "="*80)
     print("📊 BENCHMARK SUMMARY")
-    print("="*50)
+    print("="*80)
 
     # Header
-    print(f"{'Model':<30} | {'Valid JSON':<10} | {'Logic':<10} | {'Avg Time':<10}")
-    print("-" * 70)
+    print(f"{'Model':<20} | {'JSON':<5} | {'Logic':<5} | {'Code':<5} | {'Summ':<5} | {'Avg T/s':<8} | {'Avg Lat':<8}")
+    print("-" * 90)
 
     recommendation_candidates = []
 
     for model, tests in results.items():
-        json_pass = False
-        logic_pass = False
-        total_time = 0
-        valid_tests = 0
+        pass_map = {t['test_id']: t['passed'] for t in tests if t['status'] == 'success'}
 
-        for t in tests:
-            if t['status'] == 'success':
-                total_time += t['duration']
-                valid_tests += 1
+        json_pass = pass_map.get('json_strict', False)
+        logic_pass = pass_map.get('reasoning', False)
+        code_pass = pass_map.get('code_python', False)
+        summ_pass = pass_map.get('summarization', False)
 
-                if t['test_id'] == 'json_strict':
-                    json_pass = t['passed']
-                if t['test_id'] == 'reasoning':
-                    logic_pass = t['passed']
+        valid_tests = [t for t in tests if t['status'] == 'success']
+        if valid_tests:
+            avg_tps = sum(t.get('tokens_per_second', 0) for t in valid_tests) / len(valid_tests)
+            avg_lat = sum(t['duration'] for t in valid_tests) / len(valid_tests)
+        else:
+            avg_tps = 0
+            avg_lat = 0
 
-        avg_time = total_time / valid_tests if valid_tests > 0 else 0
+        print(f"{model:<20} | {'✅' if json_pass else '❌':<5} | {'✅' if logic_pass else '❌':<5} | {'✅' if code_pass else '❌':<5} | {'✅' if summ_pass else '❌':<5} | {avg_tps:.1f} t/s  | {avg_lat:.2f}s")
 
-        print(f"{model:<30} | {'✅' if json_pass else '❌':<10} | {'✅' if logic_pass else '❌':<10} | {avg_time:.2f}s")
+        # Scoring Logic
+        # JSON is critical (weight 1000)
+        # Logic is important (weight 500)
+        # Code is bonus (weight 200)
+        # Summarization is bonus (weight 100)
+        # Speed: + 10 * tokens/sec
 
-        # We value JSON validity the most, then Logic, then Speed
         if json_pass:
             score = 1000
-            if logic_pass:
-                score += 500
-            # Lower time is better, subtract time
-            score -= avg_time
-            recommendation_candidates.append((model, score, avg_time))
+            if logic_pass: score += 500
+            if code_pass: score += 200
+            if summ_pass: score += 100
+            score += (avg_tps * 10)
+            recommendation_candidates.append((model, score, avg_tps))
 
-    print("="*50)
+    print("="*80)
 
     # Recommendation
     print("\n🏆 RECOMMENDATION:")
@@ -206,13 +246,65 @@ def analyze_results(results: Dict[str, List[Dict]], timestamp: str):
         # Sort by score (descending)
         recommendation_candidates.sort(key=lambda x: x[1], reverse=True)
         best_model = recommendation_candidates[0][0]
-        avg_time = recommendation_candidates[0][2]
+        best_tps = recommendation_candidates[0][2]
         print(f"The best model for this website appears to be: **{best_model}**")
-        print(f"It passed strict JSON validation and had a good balance of speed and logic.")
+        print(f"It passed strict JSON validation and had the highest composite score (incl. {best_tps:.1f} t/s).")
 
-        # Save recommendation to a separate file for easy reading
+        # Save recommendation
         with open(os.path.join(OUTPUT_BASE_DIR, f"run_{timestamp}", "recommendation.txt"), "w") as f:
             f.write(best_model)
+
+    return recommendation_candidates
+
+def generate_report(results: Dict[str, List[Dict]], candidates: List[tuple], run_dir: str):
+    report_path = os.path.join(run_dir, "REPORT.md")
+
+    with open(report_path, "w") as f:
+        f.write("# 📊 Ollama Benchmark Report\n\n")
+        f.write(f"**Date:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+        if candidates:
+            best_model = candidates[0][0]
+            f.write(f"## 🏆 Recommended Model: **{best_model}**\n\n")
+        else:
+            f.write("## ⚠️ No Recommended Model Found\n\n")
+
+        f.write("## Summary Table\n\n")
+        f.write("| Model | JSON Strict | Logic Puzzle | Python Code | Summarization | Avg Tokens/s | Avg Latency |\n")
+        f.write("|---|---|---|---|---|---|---|\n")
+
+        for model, tests in results.items():
+            pass_map = {t['test_id']: t['passed'] for t in tests if t['status'] == 'success'}
+            valid_tests = [t for t in tests if t['status'] == 'success']
+
+            if valid_tests:
+                avg_tps = sum(t.get('tokens_per_second', 0) for t in valid_tests) / len(valid_tests)
+                avg_lat = sum(t['duration'] for t in valid_tests) / len(valid_tests)
+            else:
+                avg_tps = 0
+                avg_lat = 0
+
+            json_icon = '✅' if pass_map.get('json_strict') else '❌'
+            logic_icon = '✅' if pass_map.get('reasoning') else '❌'
+            code_icon = '✅' if pass_map.get('code_python') else '❌'
+            summ_icon = '✅' if pass_map.get('summarization') else '❌'
+
+            f.write(f"| {model} | {json_icon} | {logic_icon} | {code_icon} | {summ_icon} | {avg_tps:.2f} | {avg_lat:.2f}s |\n")
+
+        f.write("\n## Detailed Results\n")
+
+        for model, tests in results.items():
+            f.write(f"\n### Model: {model}\n")
+            for t in tests:
+                icon = '✅' if t['passed'] else '❌'
+                f.write(f"- **{t['test_id']}**: {icon}\n")
+                if not t['passed'] and t.get('error'):
+                     f.write(f"  - Error: {t['error']}\n")
+                f.write(f"  - Duration: {t['duration']:.2f}s\n")
+                if t.get('tokens_per_second'):
+                    f.write(f"  - Speed: {t['tokens_per_second']:.2f} t/s\n")
+
+    print(f"\n📄 Detailed report generated at: {report_path}")
 
 def main():
     print("🚀 STARTING OLLAMA MODEL BENCHMARK")
@@ -242,7 +334,8 @@ def main():
 
     print(f"\n💾 Results saved to {run_dir}/results.json")
 
-    analyze_results(all_results, timestamp)
+    candidates = analyze_results(all_results, timestamp)
+    generate_report(all_results, candidates, run_dir)
 
 if __name__ == "__main__":
     main()
