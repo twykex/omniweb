@@ -1,25 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { extractJSON } from "./utils";
 
 export const HistoryTimeline = ({ jsonString }) => {
     const [events, setEvents] = useState([]);
     const [error, setError] = useState(false);
 
     useEffect(() => {
-        try {
-            if (!jsonString) return;
-            // cleaning the json string
-            let cleanJson = jsonString.trim();
-            cleanJson = cleanJson.replace(/```json/g, "").replace(/```/g, "");
-
-            const parsed = JSON.parse(cleanJson);
-            if (Array.isArray(parsed)) {
-                setEvents(parsed);
-            } else {
-                setError(true);
-            }
-        } catch (e) {
-            console.error("Failed to parse history JSON", e);
+        if (!jsonString) return;
+        const parsed = extractJSON(jsonString);
+        if (Array.isArray(parsed)) {
+            setEvents(parsed);
+            setError(false);
+        } else {
             setError(true);
         }
     }, [jsonString]);

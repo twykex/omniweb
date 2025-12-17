@@ -3,6 +3,7 @@ import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { HistoryTimeline } from "./HistoryTimeline";
+import { extractJSON } from "./utils";
 
 const BASE_URL = "http://localhost:8000";
 
@@ -568,25 +569,12 @@ const QuizInterface = ({ content }) => {
   const [parseError, setParseError] = useState(false);
 
   useEffect(() => {
-    try {
-      let jsonStr = content.trim();
-      jsonStr = jsonStr.replace(/```json/gi, "").replace(/```/g, "");
-      const start = jsonStr.indexOf('{');
-      const end = jsonStr.lastIndexOf('}') + 1;
-      if (start !== -1 && end !== -1) {
-          jsonStr = jsonStr.substring(start, end);
-          const data = JSON.parse(jsonStr);
-          if (data && data.questions) {
-              setQuizData(data);
-          } else {
-              setParseError(true);
-          }
-      } else {
-           setParseError(true);
-      }
-    } catch (e) {
-      console.error("Quiz parse error", e);
-      setParseError(true);
+    const data = extractJSON(content);
+    if (data && data.questions) {
+        setQuizData(data);
+        setParseError(false);
+    } else {
+        setParseError(true);
     }
   }, [content]);
 

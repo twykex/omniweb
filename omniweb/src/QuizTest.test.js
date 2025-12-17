@@ -6,14 +6,20 @@ import axios from 'axios';
 jest.mock('axios');
 
 // Mock Framer Motion
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }) => <div {...props}>{children}</div>,
-    h1: ({ children, ...props }) => <h1 {...props}>{children}</h1>,
-    p: ({ children, ...props }) => <p {...props}>{children}</p>,
-  },
-  AnimatePresence: ({ children }) => <>{children}</>,
-}));
+jest.mock('framer-motion', () => {
+  const filterProps = (props) => {
+      const { layoutId, whileHover, whileTap, onHoverStart, onHoverEnd, initial, animate, exit, variants, transition, layout, ...rest } = props;
+      return rest;
+  };
+  return {
+    motion: {
+      div: ({ children, ...props }) => <div {...filterProps(props)}>{children}</div>,
+      h1: ({ children, ...props }) => <h1 {...filterProps(props)}>{children}</h1>,
+      p: ({ children, ...props }) => <p {...filterProps(props)}>{children}</p>,
+    },
+    AnimatePresence: ({ children }) => <>{children}</>,
+  };
+});
 
 // Mock React Markdown
 jest.mock('react-markdown', () => ({
@@ -28,6 +34,10 @@ if (typeof TextEncoder === 'undefined') {
 if (typeof TextDecoder === 'undefined') {
     global.TextDecoder = require('util').TextDecoder;
 }
+
+beforeAll(() => {
+  window.HTMLElement.prototype.scrollIntoView = jest.fn();
+});
 
 describe('Quiz Integration', () => {
     beforeEach(() => {

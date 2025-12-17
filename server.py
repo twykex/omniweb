@@ -39,17 +39,39 @@ class AnalysisRequest(BaseModel):
 
 
 def robust_json_parser(text):
-    text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
+    # Clean markdown code blocks
+    text = re.sub(r"```\w*", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
+    text = text.strip()
 
-    # Strategy: Find the first '{' and the last '}'
-    start = text.find('{')
-    end = text.rfind('}') + 1
+    # Find the first opener
+    start_brace = text.find('{')
+    start_bracket = text.find('[')
     
-    if start != -1 and end != -1:
-        text = text[start:end]
+    if start_brace == -1 and start_bracket == -1:
+        return text
     
-    return text
+    # Determine which starts first
+    if start_brace != -1 and (start_bracket == -1 or start_brace < start_bracket):
+        start = start_brace
+        opener, closer = '{', '}'
+    else:
+        start = start_bracket
+        opener, closer = '[', ']'
+
+    # Stack-based extraction to find matching closer
+    count = 0
+    for i in range(start, len(text)):
+        char = text[i]
+        if char == opener:
+            count += 1
+        elif char == closer:
+            count -= 1
+            if count == 0:
+                return text[start:i+1]
+
+    # Fallback if unbalanced (return from start to end)
+    return text[start:]
 
 
 def get_gpu_vram():
