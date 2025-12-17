@@ -118,7 +118,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   useEffect(() => {
     if (endRef.current) {
       setTimeout(() => {
-        endRef.current.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
       }, 100);
     }
   }, [columns, isThinking]);
@@ -165,6 +165,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
           selectedNode: null, 
           nodes: res.data.children 
         }]);
+      } else {
+        addToast("Could not expand this topic. Try again.", "warning");
       }
     } catch (err) {
         console.error(err);
