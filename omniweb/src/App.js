@@ -119,11 +119,22 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     setIsThinking(true);
     try {
       const contextPath = newCols.map(c => c.selectedNode).filter(Boolean).join(" > ");
+
+      // Gather recent nodes (current level + previous level)
+      const recentNodes = [];
+      if (columns[colIndex]) {
+        columns[colIndex].nodes.forEach(n => recentNodes.push(n.name));
+      }
+      if (colIndex > 0 && columns[colIndex - 1]) {
+        columns[colIndex - 1].nodes.forEach(n => recentNodes.push(n.name));
+      }
+
       const res = await axios.post(`${BASE_URL}/expand`, {
         node: node.name,
         context: contextPath,
         model: model,
-        temperature: 0.5
+        temperature: 0.5,
+        recent_nodes: recentNodes
       });
 
       if (res.data.children && res.data.children.length > 0) {
