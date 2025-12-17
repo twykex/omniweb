@@ -5,11 +5,15 @@ import ReactMarkdown from "react-markdown";
 
 const BASE_URL = "http://localhost:8000";
 
+// Suggested topics from Main branch
+const SUGGESTED_TOPICS = ["Neural Networks", "The Renaissance", "Mars Colonization", "Jazz History"];
+
 const App = () => {
   const [hasStarted, setHasStarted] = useState(false);
   const [availableModels, setAvailableModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState("");
   const [loadingModels, setLoadingModels] = useState(true);
+  const [backendError, setBackendError] = useState(false);
   const [startTopic, setStartTopic] = useState("");
   const [toasts, setToasts] = useState([]);
 
@@ -19,21 +23,27 @@ const App = () => {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   };
 
+  const fetchModels = async () => {
+    setLoadingModels(true);
+    setBackendError(false);
+    try {
+      const res = await axios.get(`${BASE_URL}/models`);
+      const models = res.data.models || [];
+      setAvailableModels(models);
+
+      const smartModel = models.find(m => 
+          (m.name.includes("llama3") || m.name.includes("mistral") || m.name.includes("gpt")) && m.fits
+      ) || models.find(m => m.fits) || models[0];
+
+      setSelectedModel(smartModel ? smartModel.name : "");
+    } catch (err) {
+      console.error("Backend Offline");
+      setBackendError(true);
+    }
+    finally { setLoadingModels(false); }
+  };
+
   useEffect(() => {
-    const fetchModels = async () => {
-      try {
-        const res = await axios.get(`${BASE_URL}/models`);
-        const models = res.data.models || [];
-        setAvailableModels(models);
-
-        const smartModel = models.find(m =>
-            (m.name.includes("llama3") || m.name.includes("mistral") || m.name.includes("gpt")) && m.fits
-        ) || models.find(m => m.fits) || models[0];
-
-        setSelectedModel(smartModel ? smartModel.name : "");
-      } catch (err) { console.error("Backend Offline"); }
-      finally { setLoadingModels(false); }
-    };
     fetchModels();
   }, []);
 
@@ -43,7 +53,7 @@ const App = () => {
 
       <AnimatePresence mode="wait">
         {!hasStarted ? (
-          <LandingInterface
+          <LandingInterface 
             key="landing"
             models={availableModels}
             selected={selectedModel}
@@ -52,10 +62,12 @@ const App = () => {
             setStartTopic={setStartTopic}
             onStart={() => { if(startTopic.trim()) setHasStarted(true); }}
             isLoading={loadingModels}
+            backendError={backendError}
+            onRetry={fetchModels}
           />
         ) : (
-          <LearningWorkspace
-            key="workspace"
+          <LearningWorkspace 
+            key="workspace" 
             model={selectedModel}
             initialTopic={startTopic}
             onExit={() => setHasStarted(false)}
@@ -69,7 +81,7 @@ const App = () => {
   );
 };
 
-// --- BACKGROUND ENGINE (New) ---
+// --- BACKGROUND ENGINE ---
 const BackgroundEngine = () => (
   <div className="bg-engine">
     <div className="orb orb-1"></div>
@@ -81,10 +93,10 @@ const BackgroundEngine = () => (
 
 // --- WORKSPACE COMPONENT ---
 const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
-  const [columns, setColumns] = useState([{
-    id: "root",
-    selectedNode: null,
-    nodes: [{ name: initialTopic, desc: "The starting point of your journey.", status: "concept" }]
+  const [columns, setColumns] = useState([{ 
+    id: "root", 
+    selectedNode: null, 
+    nodes: [{ name: initialTopic, desc: "The starting point of your journey.", status: "concept" }] 
   }]);
 
   const [lessonData, setLessonData] = useState(null);
@@ -110,7 +122,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     }
   }, [columns, isThinking]);
 
-  // Handle Escape Key to close lesson panel
+  // Handle Escape Key
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -132,15 +144,10 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     setIsThinking(true);
     try {
       const contextPath = newCols.map(c => c.selectedNode).filter(Boolean).join(" > ");
-
-      // Gather recent nodes (current level + previous level)
+      
       const recentNodes = [];
-      if (columns[colIndex]) {
-        columns[colIndex].nodes.forEach(n => recentNodes.push(n.name));
-      }
-      if (colIndex > 0 && columns[colIndex - 1]) {
-        columns[colIndex - 1].nodes.forEach(n => recentNodes.push(n.name));
-      }
+      if (columns[colIndex]) columns[colIndex].nodes.forEach(n => recentNodes.push(n.name));
+      if (colIndex > 0 && columns[colIndex - 1]) columns[colIndex - 1].nodes.forEach(n => recentNodes.push(n.name));
 
       const res = await axios.post(`${BASE_URL}/expand`, {
         node: node.name,
@@ -151,10 +158,10 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
       });
 
       if (res.data.children && res.data.children.length > 0) {
-        setColumns([...newCols, {
-          id: node.name,
-          selectedNode: null,
-          nodes: res.data.children
+        setColumns([...newCols, { 
+          id: node.name, 
+          selectedNode: null, 
+          nodes: res.data.children 
         }]);
       }
     } catch (err) {
@@ -200,10 +207,10 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
           const chunk = decoder.decode(value, { stream: true });
           setLessonData(prev => {
             if (!prev) return null;
-            return {
-              ...prev,
+            return { 
+              ...prev, 
               content: prev.content + chunk,
-              isLoading: false
+              isLoading: false 
             };
           });
         }
@@ -226,7 +233,6 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   };
 
   const handleBreadcrumbClick = (index) => {
-      // Keep columns up to index + 1 (the children of the clicked breadcrumb's column selection)
       if (index + 1 < columns.length) {
           setColumns(columns.slice(0, index + 2));
       }
@@ -234,8 +240,18 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
   const readingTime = lessonData && lessonData.content ? Math.ceil(lessonData.content.split(/\s+/).length / 200) : 0;
 
+  // Transform 
+
+[Image of X]
+ into a custom Markdown image format for rendering
+  const processedContent = lessonData?.content?.replace(
+      /\/g, 
+      '![Diagram: $1](https://source.unsplash.com/1600x900/?$1)' 
+      // Note: In a real app, you'd use a specific diagram API or Google Search URL
+  ) || "";
+
   return (
-    <motion.div
+    <motion.div 
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="workspace"
     >
@@ -247,11 +263,11 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
           {columns.map((col, i) => (
              col.selectedNode && (
                <React.Fragment key={i}>
-                 <span
-                    className="crumb"
-                    onClick={() => handleBreadcrumbClick(i)}
-                    style={{cursor: 'pointer'}}
-                    title="Navigate to this level"
+                 <span 
+                   className="crumb" 
+                   onClick={() => handleBreadcrumbClick(i)}
+                   style={{cursor: 'pointer'}}
+                   title="Navigate to this level"
                  >
                     {col.selectedNode}
                  </span>
@@ -265,10 +281,10 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
       <div className="miller-columns-container" ref={scrollRef}>
         {columns.map((col, colIdx) => (
-          <motion.div
+          <motion.div 
             key={`${col.id}-${colIdx}`}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, x: 50 }} 
+            animate={{ opacity: 1, x: 0 }} 
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             className="column"
           >
@@ -277,9 +293,9 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
             </div>
             <div className="node-list">
               {col.nodes.map((node) => (
-                <NodeCard
-                  key={node.name}
-                  node={node}
+                <NodeCard 
+                  key={node.name} 
+                  node={node} 
                   isActive={col.selectedNode === node.name}
                   onClick={() => handleNodeClick(colIdx, node)}
                   onAction={(mode) => openLesson(node.name, mode)}
@@ -288,7 +304,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
             </div>
           </motion.div>
         ))}
-
+        
         {isThinking && <SkeletonColumn />}
         <div ref={endRef} style={{minWidth: "60px", height: "100%"}} />
       </div>
@@ -296,12 +312,12 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
       <AnimatePresence>
         {lessonData && (
           <>
-            <motion.div
+            <motion.div 
                 className="lesson-backdrop"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={closeLesson}
             />
-            <motion.div
+            <motion.div 
                 className="lesson-panel"
                 initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
                 transition={{ type: "spring", stiffness: 120, damping: 20 }}
@@ -314,8 +330,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
                 <div className="panel-tabs">
                     {['explain', 'history', 'impact', 'eli5', 'quiz'].map(m => (
-                        <button
-                            key={m}
+                        <button 
+                            key={m} 
                             className={lessonData.mode === m ? 'active' : ''}
                             onClick={() => openLesson(analyzingNode, m)}
                         >
@@ -337,9 +353,16 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                     </div>
                 ) : (
                     <ReactMarkdown components={{
-                        blockquote: ({node, ...props}) => <div className="quote-box" {...props} />
+                        blockquote: ({node, ...props}) => <div className="quote-box" {...props} />,
+                        img: ({node, ...props}) => (
+                            <div className="diagram-container">
+                                <div className="diagram-label">DIAGRAM</div>
+                                <img {...props} className="lesson-image" alt={props.alt} />
+                                <div className="diagram-caption">Visual representation of: {props.alt.replace('Diagram: ', '')}</div>
+                            </div>
+                        )
                     }}>
-                        {lessonData.content}
+                        {processedContent}
                     </ReactMarkdown>
                 )}
                 </div>
@@ -365,7 +388,7 @@ const NodeCard = ({ node, isActive, onClick, onAction }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
-    <motion.div
+    <motion.div 
       className={`node-card ${isActive ? 'active' : ''}`}
       onClick={onClick}
       onHoverStart={() => setIsHovered(true)}
@@ -379,7 +402,7 @@ const NodeCard = ({ node, isActive, onClick, onAction }) => {
 
       <AnimatePresence>
         {(isActive || isHovered) && (
-          <motion.div
+          <motion.div 
             className="node-actions"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -531,57 +554,56 @@ const ModelSelector = ({ models, selected, onSelect }) => {
   );
 };
 
-const SUGGESTED_TOPICS = ["Neural Networks", "The Renaissance", "Mars Colonization", "Jazz History"];
-
-const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic }) => {
+const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic, backendError, onRetry }) => {
   const inputRef = useRef(null);
 
   return (
-    <motion.div
+    <motion.div 
       className="landing-container"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
     >
       <div className="landing-content">
-        <motion.h1
+        <motion.h1 
           initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1, duration: 0.8 }}
           className="hero-title"
         >
           Omni<span className="accent">Web</span>
         </motion.h1>
-
-        <motion.p
+        
+        <motion.p 
           initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.8 }}
           className="hero-subtitle"
         >
           The Infinite Learning Engine
         </motion.p>
 
-        <motion.div
+        <motion.div 
           className="search-wrapper"
           initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5 }}
         >
-          <input
+          <input 
               ref={inputRef}
-              type="text"
+              type="text" 
               value={startTopic}
               onChange={(e) => setStartTopic(e.target.value)}
               placeholder="Search any topic (e.g., Black Holes, Jazz)..."
               onKeyDown={(e) => e.key === 'Enter' && startTopic.trim() && onStart()}
               autoFocus
+              disabled={backendError}
           />
-          <button onClick={onStart} disabled={isLoading || !startTopic.trim()} className="go-btn">
+          <button onClick={onStart} disabled={isLoading || backendError || !startTopic.trim()} className="go-btn">
                ➜
           </button>
         </motion.div>
 
-        <motion.div
+        <motion.div 
           className="suggested-topics"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
         >
           <span>Try:</span>
           {SUGGESTED_TOPICS.map(topic => (
-            <button
-              key={topic}
+            <button 
+              key={topic} 
               className="topic-tag"
               onClick={() => {
                 setStartTopic(topic);
@@ -593,15 +615,21 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
           ))}
         </motion.div>
 
-        <motion.div
-           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
-           className="landing-footer"
+        <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
+            className="landing-footer"
         >
-           {isLoading ? (
-               <span className="status-connecting">INITIALIZING SYSTEM...</span>
-           ) : (
-               <ModelSelector models={models} selected={selected} onSelect={onSelect} />
-           )}
+            {isLoading ? (
+                <span className="status-connecting">INITIALIZING SYSTEM...</span>
+            ) : backendError ? (
+                <div className="error-state">
+                  <span className="error-msg">⚠️ Backend Offline</span>
+                  <button onClick={onRetry} className="retry-btn">RETRY CONNECTION</button>
+                  <div className="error-hint">Ensure <code>server.py</code> and <code>Ollama</code> are running.</div>
+                </div>
+            ) : (
+                <ModelSelector models={models} selected={selected} onSelect={onSelect} />
+            )}
         </motion.div>
       </div>
     </motion.div>
@@ -626,14 +654,20 @@ const GlobalCSS = () => (
 
     body { margin: 0; background: var(--bg-dark); color: var(--text); font-family: 'Inter', sans-serif; overflow: hidden; }
 
+    /* ACCESSIBILITY */
+    *:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+    }
+
     /* BACKGROUND ENGINE */
     .bg-engine { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: #050507; }
-
+    
     .orb { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.4; animation: float 20s infinite ease-in-out; }
     .orb-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: radial-gradient(circle, #4c1d95 0%, transparent 70%); animation-delay: 0s; }
     .orb-2 { bottom: -20%; right: -10%; width: 60vw; height: 60vw; background: radial-gradient(circle, #0e7490 0%, transparent 70%); animation-delay: -5s; }
     .orb-3 { top: 40%; left: 40%; width: 40vw; height: 40vw; background: radial-gradient(circle, #be185d 0%, transparent 70%); opacity: 0.2; animation-delay: -10s; }
-
+    
     .bg-noise {
         position: fixed; inset: 0; opacity: 0.03; pointer-events: none;
         background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
@@ -653,7 +687,7 @@ const GlobalCSS = () => (
     .accent { background: linear-gradient(135deg, #a78bfa, #22d3ee); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-style: italic; }
     .hero-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 50px; font-weight: 300; letter-spacing: 0.5px; }
 
-    .search-wrapper {
+    .search-wrapper { 
         position: relative; background: rgba(255,255,255,0.03); padding: 6px; border-radius: 100px;
         border: 1px solid var(--glass-border); display: flex; transition: all 0.3s; backdrop-filter: blur(10px);
     }
@@ -664,48 +698,46 @@ const GlobalCSS = () => (
 
     .suggested-topics {
         margin-top: 24px;
-        display: flex;
-        gap: 12px;
-        justify-content: center;
-        align-items: center;
-        flex-wrap: wrap;
-        font-size: 14px;
-        color: var(--text-muted);
+        display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap;
+        font-size: 14px; color: var(--text-muted);
     }
     .topic-tag {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid var(--glass-border);
-        padding: 8px 16px;
-        border-radius: 20px;
-        color: var(--text-muted);
-        cursor: pointer;
-        transition: all 0.2s;
-        font-family: 'Inter', sans-serif;
-        font-size: 12px;
-        font-weight: 500;
-        letter-spacing: 0.5px;
+        background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
+        padding: 8px 16px; border-radius: 20px; color: var(--text-muted);
+        cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif;
+        font-size: 12px; font-weight: 500; letter-spacing: 0.5px;
     }
     .topic-tag:hover {
-        background: rgba(255,255,255,0.1);
-        color: #fff;
-        border-color: rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.3);
         transform: translateY(-2px);
     }
 
-    .landing-footer { margin-top: 40px; }
+    .landing-footer { margin-top: 40px; min-height: 50px; }
     .dot.online { width: 6px; height: 6px; background: #34d399; border-radius: 50%; box-shadow: 0 0 8px #34d399; }
+
+    .error-state { display: flex; flex-direction: column; align-items: center; gap: 12px; animation: fadeIn 0.5s ease; }
+    .error-msg { color: #f87171; font-weight: 600; font-size: 14px; letter-spacing: 0.5px; }
+    .retry-btn { 
+        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); 
+        color: #fff; padding: 8px 16px; border-radius: 6px; cursor: pointer; 
+        font-size: 11px; font-weight: 600; transition: 0.2s; 
+    }
+    .retry-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+    .error-hint { font-size: 11px; color: var(--text-muted); opacity: 0.7; }
+    .error-hint code { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
     /* MODEL SELECTOR */
     .model-selector-container { position: relative; width: 280px; text-align: left; margin: 0 auto; }
     .model-selector-trigger {
-        background: rgba(255,255,255,0.05); padding: 12px 20px; border-radius: 12px;
+        background: rgba(255,255,255,0.05); padding: 12px 20px; border-radius: 12px; 
         border: 1px solid var(--glass-border); backdrop-filter: blur(10px);
         display: flex; align-items: center; gap: 10px; cursor: pointer; transition: 0.2s;
         font-size: 13px; font-weight: 500; color: #fff;
     }
     .model-selector-trigger:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
     .selected-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
+    
     .model-dropdown {
         position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 10px;
         background: #09090b; border: 1px solid var(--glass-border); border-radius: 12px;
@@ -715,18 +747,18 @@ const GlobalCSS = () => (
     .model-dropdown::-webkit-scrollbar { width: 4px; }
     .model-dropdown::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
 
-    .model-option {
+    .model-option { 
         padding: 10px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px;
         transition: 0.2s;
     }
     .model-option:hover { background: rgba(255,255,255,0.08); }
     .model-option.selected { background: rgba(139, 92, 246, 0.15); }
     .model-option.warning .model-name { color: #f87171; }
-
+    
     .model-info { flex: 1; text-align: left; }
     .model-name { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 2px; }
     .model-meta { font-size: 10px; color: var(--text-muted); }
-    .fit-ok { color: #34d399; }
+    .fit-ok { color: #34d399; } 
     .fit-bad { color: #f87171; font-weight: 600; }
     .check { color: var(--primary); font-size: 14px; }
 
@@ -749,11 +781,11 @@ const GlobalCSS = () => (
     .node-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 50px; }
 
     /* NODE CARDS */
-    .node-card {
-        background: rgba(255,255,255,0.02);
-        border: 1px solid var(--glass-border);
-        border-radius: 12px;
-        padding: 24px;
+    .node-card { 
+        background: rgba(255,255,255,0.02); 
+        border: 1px solid var(--glass-border); 
+        border-radius: 12px; 
+        padding: 24px; 
         position: relative; overflow: hidden;
         cursor: pointer;
         transition: background 0.3s, border-color 0.3s;
@@ -769,35 +801,35 @@ const GlobalCSS = () => (
     .node-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 24px; position: relative; z-index: 2; }
     .node-actions .action-btn:last-child { grid-column: span 2; }
 
-    .action-btn {
+    .action-btn { 
         display: flex; align-items: center; justify-content: center; gap: 10px;
         background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
-        color: var(--text-muted); padding: 12px 0; border-radius: 10px;
+        color: var(--text-muted); padding: 12px 0; border-radius: 10px; 
         font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
         cursor: pointer; transition: all 0.2s ease;
         backdrop-filter: blur(5px);
     }
-    .action-btn:hover {
-        background: rgba(255,255,255,0.1);
-        border-color: rgba(255,255,255,0.2);
-        color: #fff;
+    .action-btn:hover { 
+        background: rgba(255,255,255,0.1); 
+        border-color: rgba(255,255,255,0.2); 
+        color: #fff; 
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
     .action-btn:active { transform: translateY(0); }
-
+    
     .btn-icon { display: flex; align-items: center; opacity: 0.7; }
     .action-btn:hover .btn-icon { opacity: 1; color: var(--primary); }
 
-    .active-glow {
+    .active-glow { 
         position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--primary);
         box-shadow: 2px 0 20px var(--primary); z-index: 1;
     }
 
     /* LESSON PANEL */
     .lesson-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 90; }
-    .lesson-panel {
-        position: fixed; top: 0; right: 0; bottom: 0; width: 680px;
+    .lesson-panel { 
+        position: fixed; top: 0; right: 0; bottom: 0; width: 680px; 
         background: #09090b; border-left: 1px solid var(--glass-border); z-index: 100;
         display: flex; flex-direction: column;
         box-shadow: -20px 0 60px rgba(0,0,0,0.5);
@@ -805,16 +837,13 @@ const GlobalCSS = () => (
     .panel-header { padding: 50px 50px 20px 50px; }
     .panel-kicker { font-size: 11px; font-weight: 700; color: var(--secondary); letter-spacing: 2px; margin-bottom: 12px; text-transform: uppercase; }
     .panel-header h3 { font-family: 'Playfair Display', serif; font-size: 42px; margin: 0; color: #fff; line-height: 1.1; letter-spacing: -0.5px; }
-
-    /* --- CONFLICT RESOLVED HERE --- */
     .panel-meta { font-size: 10px; color: var(--text-muted); letter-spacing: 1px; margin-top: 5px; }
 
     .panel-tabs { display: flex; padding: 0 50px; border-bottom: 1px solid var(--glass-border); gap: 30px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
     .panel-tabs::-webkit-scrollbar { display: none; }
-    /* ------------------------------ */
-
-    .panel-tabs button {
-        background: none; border: none; padding: 20px 0; color: var(--text-muted);
+    
+    .panel-tabs button { 
+        background: none; border: none; padding: 20px 0; color: var(--text-muted); 
         font-size: 11px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; letter-spacing: 1px;
         transition: 0.2s;
     }
@@ -824,14 +853,49 @@ const GlobalCSS = () => (
     .panel-content { padding: 50px; overflow-y: auto; color: #d1d5db; font-size: 18px; line-height: 1.8; font-family: 'Playfair Display', serif; }
     .panel-content h1, .panel-content h2, .panel-content h3 { font-family: 'Inter', sans-serif; color: #fff; margin-top: 30px; letter-spacing: -0.5px; }
     .panel-content strong { color: #fff; font-weight: 600; }
-
-    .quote-box {
+    
+    .quote-box { 
         background: rgba(139, 92, 246, 0.05); border-left: 3px solid var(--primary);
         padding: 24px; margin: 30px 0; font-style: italic; color: #e5e7eb; border-radius: 0 8px 8px 0;
     }
 
+    /* DIAGRAM/IMAGE STYLES */
+    .diagram-container {
+        margin: 30px 0;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid var(--glass-border);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .diagram-label {
+        background: rgba(6, 182, 212, 0.1); /* Cyan */
+        color: var(--secondary);
+        font-family: 'Inter', sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 6px 12px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .lesson-image {
+        width: 100%;
+        height: auto;
+        display: block;
+        opacity: 0.8;
+        transition: opacity 0.3s;
+    }
+    .lesson-image:hover { opacity: 1; }
+    .diagram-caption {
+        font-family: 'Inter', sans-serif;
+        font-size: 12px;
+        color: var(--text-muted);
+        padding: 10px 15px;
+        border-top: 1px solid var(--glass-border);
+        background: rgba(0,0,0,0.2);
+    }
+
     .panel-footer { padding: 20px 50px; border-top: 1px solid var(--glass-border); display: flex; justify-content: flex-end; gap: 12px; background: rgba(0,0,0,0.3); }
-    .panel-footer button {
+    .panel-footer button { 
         background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted);
         padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 12px; transition: 0.2s;
     }
@@ -844,11 +908,11 @@ const GlobalCSS = () => (
     @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 0.6; } 100% { opacity: 0.3; } }
 
     /* TOASTS */
-    .toast-container {
-        position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    .toast-container { 
+        position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); 
         display: flex; flex-direction: column; gap: 10px; z-index: 200; pointer-events: none;
     }
-    .toast {
+    .toast { 
         background: rgba(20, 20, 25, 0.9); border: 1px solid var(--glass-border);
         padding: 12px 24px; border-radius: 50px; color: #fff; font-size: 13px; font-weight: 500;
         backdrop-filter: blur(10px); box-shadow: 0 10px 40px rgba(0,0,0,0.5);
