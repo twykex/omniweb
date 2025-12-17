@@ -6,7 +6,7 @@ import App from './App';
 
 // Mock Axios (used in Main branch logic)
 jest.mock('axios', () => ({
-  get: jest.fn(() => Promise.resolve({ data: { models: [{ name: 'llama3', fits: true }] } })),
+  get: jest.fn().mockResolvedValue({ data: { models: [{ name: 'llama3', fits: true }] } }),
   post: jest.fn(),
 }));
 
