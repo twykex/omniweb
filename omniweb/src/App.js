@@ -11,10 +11,10 @@ const SUGGESTED_TOPICS = ["Neural Networks", "The Renaissance", "Mars Colonizati
 
 // --- HELPERS ---
 
-// Converts "" tags into Markdown images with a generation URL
+// Converts "<diagram:query>" tags into Markdown images with a generation URL
 const processAutoDiagrams = (text) => {
   if (!text) return "";
-  const regex = /\/g;
+  const regex = /<diagram:(.*?)>/g;
   return text.replace(regex, (match, query) => {
     // We append specific keywords to ensure the AI generator creates a diagram style image
     const prompt = encodeURIComponent(`educational scientific diagram schematic white on black background: ${query}`);
@@ -720,6 +720,24 @@ const QuizInterface = ({ content, quizConfig }) => {
   const [quizFinished, setQuizFinished] = useState(false);
   const [parseError, setParseError] = useState(false);
   const [userAnswers, setUserAnswers] = useState([]); // Store answers for review
+  const [timeLeft, setTimeLeft] = useState(30);
+
+  useEffect(() => {
+    if (quizData && !showResult && !quizFinished) {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+             clearInterval(timer);
+             handleOptionClick(-1); // Time's up
+             return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizData, showResult, quizFinished, currentQuestion]);
 
   useEffect(() => {
     try {
@@ -747,10 +765,15 @@ const QuizInterface = ({ content, quizConfig }) => {
   const handleOptionClick = (index) => {
     if (selectedOption !== null) return;
     setSelectedOption(index);
-    const isCorrect = index === quizData.questions[currentQuestion].correct_index;
-    if (isCorrect) {
-        setScore(score + 1);
+
+    let isCorrect = false;
+    if (index !== -1) {
+        isCorrect = index === quizData.questions[currentQuestion].correct_index;
+        if (isCorrect) {
+            setScore(score + 1);
+        }
     }
+
     setUserAnswers([...userAnswers, { questionIndex: currentQuestion, selected: index, correct: isCorrect }]);
     setShowResult(true);
   };
@@ -758,6 +781,7 @@ const QuizInterface = ({ content, quizConfig }) => {
   const nextQuestion = () => {
     setSelectedOption(null);
     setShowResult(false);
+    setTimeLeft(30);
     if (currentQuestion + 1 < quizData.questions.length) {
         setCurrentQuestion(currentQuestion + 1);
     } else {
@@ -802,7 +826,9 @@ const QuizInterface = ({ content, quizConfig }) => {
                                       <span style={{color:'#34d399'}}>✓ Correct</span>
                                   ) : (
                                       <>
-                                          <span style={{color:'#f87171'}}>✗ You chose: {q.options[ans?.selected]}</span>
+                                          <span style={{color:'#f87171'}}>
+                                            ✗ {ans?.selected === -1 ? "Time's Up" : `You chose: ${q.options[ans?.selected]}`}
+                                          </span>
                                           <br/>
                                           <span style={{color:'#34d399'}}>✓ Correct: {q.options[q.correct_index]}</span>
                                       </>
@@ -820,6 +846,7 @@ const QuizInterface = ({ content, quizConfig }) => {
                   setSelectedOption(null);
                   setShowResult(false);
                   setUserAnswers([]);
+                  setTimeLeft(30);
               }} className="retry-btn" style={{marginTop: '20px'}}>RETRY</button>
           </div>
       );
@@ -832,8 +859,13 @@ const QuizInterface = ({ content, quizConfig }) => {
           <div className="quiz-progress-bar">
               <div className="progress-fill" style={{width: `${((currentQuestion) / quizData.questions.length) * 100}%`}}></div>
           </div>
-          <div className="quiz-progress-text">
-              Question {currentQuestion + 1} of {quizData.questions.length}
+          <div className="quiz-header-row" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+            <div className="quiz-progress-text">
+                Question {currentQuestion + 1} of {quizData.questions.length}
+            </div>
+            <div className={`quiz-timer ${timeLeft < 10 ? 'urgent' : ''}`} style={{color: timeLeft < 10 ? '#f87171' : 'var(--text-muted)', fontWeight: 'bold', fontSize: '14px'}}>
+                ⏱ {timeLeft}s
+            </div>
           </div>
 
           <AnimatePresence mode="wait">

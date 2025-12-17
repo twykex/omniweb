@@ -8,7 +8,7 @@ jest.mock('axios');
 // Mock Framer Motion
 jest.mock('framer-motion', () => ({
   motion: {
-    div: ({ children, ...props }) => <div {...props}>{children}</div>,
+    div: ({ children, whileHover, whileTap, layout, layoutId, ...props }) => <div {...props}>{children}</div>,
     h1: ({ children, ...props }) => <h1 {...props}>{children}</h1>,
     p: ({ children, ...props }) => <p {...props}>{children}</p>,
   },
@@ -32,6 +32,9 @@ if (typeof TextDecoder === 'undefined') {
 describe('Quiz Integration', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        // Mock scrollIntoView
+        Element.prototype.scrollIntoView = jest.fn();
+
         axios.get.mockResolvedValue({ data: { models: [{ name: 'llama3', fits: true }] } });
         axios.post.mockImplementation((url) => {
              if (url.endsWith('/expand')) {
@@ -103,9 +106,9 @@ describe('Quiz Integration', () => {
         const quizBtn = await screen.findByText('Quiz');
         fireEvent.click(quizBtn);
 
-        // Expect loading state first
-        // Note: The loading state might flicker very fast because our mock stream is instant.
-        // But we should see "GENERATING QUIZ..." or the quiz content eventually.
+        // Wait for Config Screen and Start
+        await screen.findByText('Configure Quiz');
+        fireEvent.click(screen.getByText('START QUIZ'));
 
         // Wait for quiz content
         await waitFor(() => {
@@ -115,6 +118,9 @@ describe('Quiz Integration', () => {
         expect(screen.getByText('Question 1 of 1')).toBeInTheDocument();
         expect(screen.getByText('3')).toBeInTheDocument();
         expect(screen.getByText('4')).toBeInTheDocument();
+
+        // Check Timer
+        expect(screen.getByText(/⏱ 30s/)).toBeInTheDocument();
 
         // Click correct answer
         fireEvent.click(screen.getByText('4'));
@@ -134,5 +140,8 @@ describe('Quiz Integration', () => {
         // Retry
         fireEvent.click(screen.getByText('RETRY'));
         expect(screen.getByText('What is 2+2?')).toBeInTheDocument();
+
+        // Check Timer Reset
+        expect(screen.getByText(/⏱ 30s/)).toBeInTheDocument();
     });
 });
