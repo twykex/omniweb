@@ -126,8 +126,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     if (isThinking) return;
 
     const newCols = columns.slice(0, colIndex + 1);
-    newCols[colIndex].selectedNode = node.name;
-    setColumns([...newCols]);
+    newCols[colIndex] = { ...newCols[colIndex], selectedNode: node.name };
+    setColumns(newCols);
 
     setIsThinking(true);
     try {

@@ -41,9 +41,22 @@ def robust_json_parser(text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
     start = text.find('{')
-    end = text.rfind('}') + 1
-    if start != -1 and end != -1:
-        text = text[start:end]
+    if start == -1:
+        return text
+
+    text = text[start:]  # Trim leading garbage
+
+    # Try from the end
+    end = text.rfind('}')
+    while end != -1:
+        candidate = text[:end+1]
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            # Try next closing brace from the end
+            end = text.rfind('}', 0, end)
+
     return text
 
 
@@ -165,6 +178,7 @@ def expand_node(req: ExpandRequest):
         }
         try:
             response = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=60)
+            response.raise_for_status()
             json_text = robust_json_parser(response.json().get("response", ""))
             return json.loads(json_text)
         except Exception as e:
