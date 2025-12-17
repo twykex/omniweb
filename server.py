@@ -42,19 +42,13 @@ def robust_json_parser(text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
 
-    start_indices = [m.start() for m in re.finditer(r'{', text)]
-
-    for start in start_indices:
-        try:
-            obj, _ = json.JSONDecoder().raw_decode(text[start:])
-            return json.dumps(obj)
-        except json.JSONDecodeError:
-            continue
-
+    # Strategy: Find the first '{' and the last '}'
     start = text.find('{')
     end = text.rfind('}') + 1
+    
     if start != -1 and end != -1:
-        return text[start:end]
+        text = text[start:end]
+    
     return text
 
 
@@ -166,6 +160,7 @@ def expand_node(req: ExpandRequest):
         }
         try:
             response = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=60)
+            response.raise_for_status()
             json_text = robust_json_parser(response.json().get("response", ""))
             return json.loads(json_text)
         except Exception as e:
