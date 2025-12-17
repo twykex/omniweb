@@ -25,8 +25,12 @@ const App = () => {
         const res = await axios.get(`${BASE_URL}/models`);
         const models = res.data.models || [];
         setAvailableModels(models);
-        const smartModel = models.find(m => m.includes("llama3") || m.includes("mistral") || m.includes("gpt")) || models[0];
-        setSelectedModel(smartModel || "");
+
+        const smartModel = models.find(m =>
+            (m.name.includes("llama3") || m.name.includes("mistral") || m.name.includes("gpt")) && m.fits
+        ) || models.find(m => m.fits) || models[0];
+
+        setSelectedModel(smartModel ? smartModel.name : "");
       } catch (err) { console.error("Backend Offline"); }
       finally { setLoadingModels(false); }
     };
@@ -473,6 +477,60 @@ const ToastContainer = ({ toasts }) => (
     </div>
 );
 
+const ModelSelector = ({ models, selected, onSelect }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    const close = () => setIsOpen(false);
+    if (isOpen) window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [isOpen]);
+
+  const selectedModelObj = models.find(m => m.name === selected);
+
+  return (
+    <div className="model-selector-container" onClick={e => e.stopPropagation()}>
+      <div className="model-selector-trigger" onClick={() => setIsOpen(!isOpen)}>
+        <span className="dot online"></span>
+        <span className="selected-name">
+            {selectedModelObj ? selectedModelObj.name.toUpperCase() : "SELECT MODEL"}
+        </span>
+        <span className="arrow" style={{ fontSize: '10px', marginLeft: '8px' }}>{isOpen ? '▲' : '▼'}</span>
+      </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className="model-dropdown"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+          >
+            {models.map(m => (
+              <div
+                key={m.name}
+                className={`model-option ${m.name === selected ? 'selected' : ''} ${!m.fits ? 'warning' : ''}`}
+                onClick={() => {
+                    onSelect(m.name);
+                    setIsOpen(false);
+                }}
+              >
+                <div className="model-info">
+                    <div className="model-name">{m.name.toUpperCase()}</div>
+                    <div className="model-meta">
+                        {m.size_gb} GB • {m.fits ? <span className="fit-ok">Fits in VRAM</span> : <span className="fit-bad">⚠️ May not fit</span>}
+                    </div>
+                </div>
+                {m.name === selected && <div className="check">✓</div>}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic }) => (
   <motion.div
     className="landing-container"
@@ -517,12 +575,7 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
          {isLoading ? (
              <span className="status-connecting">INITIALIZING SYSTEM...</span>
          ) : (
-             <div className="model-selector-pill">
-                 <span className="dot online"></span>
-                 <select value={selected} onChange={(e) => onSelect(e.target.value)}>
-                    {models.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}
-                 </select>
-             </div>
+             <ModelSelector models={models} selected={selected} onSelect={onSelect} />
          )}
       </motion.div>
     </div>
@@ -584,9 +637,42 @@ const GlobalCSS = () => (
     .go-btn:hover { transform: scale(1.05); background: #e0e7ff; }
 
     .landing-footer { margin-top: 40px; }
-    .model-selector-pill { display: inline-flex; align-items: center; background: rgba(255,255,255,0.05); padding: 8px 16px; border-radius: 20px; border: 1px solid var(--glass-border); gap: 10px; backdrop-filter: blur(5px); }
-    .model-selector-pill select { background: transparent; border: none; color: var(--text-muted); outline: none; cursor: pointer; font-size: 13px; font-family: 'Inter'; }
     .dot.online { width: 6px; height: 6px; background: #34d399; border-radius: 50%; box-shadow: 0 0 8px #34d399; }
+
+    /* MODEL SELECTOR */
+    .model-selector-container { position: relative; width: 280px; text-align: left; margin: 0 auto; }
+    .model-selector-trigger {
+        background: rgba(255,255,255,0.05); padding: 12px 20px; border-radius: 12px;
+        border: 1px solid var(--glass-border); backdrop-filter: blur(10px);
+        display: flex; align-items: center; gap: 10px; cursor: pointer; transition: 0.2s;
+        font-size: 13px; font-weight: 500; color: #fff;
+    }
+    .model-selector-trigger:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+    .selected-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .model-dropdown {
+        position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 10px;
+        background: #09090b; border: 1px solid var(--glass-border); border-radius: 12px;
+        padding: 6px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); overflow: hidden;
+        max-height: 300px; overflow-y: auto; z-index: 100;
+    }
+    .model-dropdown::-webkit-scrollbar { width: 4px; }
+    .model-dropdown::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+    .model-option {
+        padding: 10px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+        transition: 0.2s;
+    }
+    .model-option:hover { background: rgba(255,255,255,0.08); }
+    .model-option.selected { background: rgba(139, 92, 246, 0.15); }
+    .model-option.warning .model-name { color: #f87171; }
+
+    .model-info { flex: 1; text-align: left; }
+    .model-name { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+    .model-meta { font-size: 10px; color: var(--text-muted); }
+    .fit-ok { color: #34d399; }
+    .fit-bad { color: #f87171; font-weight: 600; }
+    .check { color: var(--primary); font-size: 14px; }
 
     /* HEADER */
     .hud-header { height: 70px; display: flex; align-items: center; padding: 0 30px; border-bottom: 1px solid var(--glass-border); background: rgba(8, 8, 11, 0.6); backdrop-filter: blur(20px); z-index: 10; justify-content: space-between; }

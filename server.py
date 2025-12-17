@@ -1,6 +1,9 @@
 import json
 import requests
 import re
+import subprocess
+import shutil
+import platform
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,7 +46,36 @@ def robust_json_parser(text):
         text = text[start:end]
     return text
 
+
+def get_gpu_vram():
+    try:
+        # Check for NVIDIA GPU via nvidia-smi
+        if shutil.which("nvidia-smi"):
+            output = subprocess.check_output(
+                ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                encoding="utf-8"
+            )
+            # Sum up all GPUs? Usually we run on one, but let's take the first one or sum?
+            # For simplicity, taking the first one (usually index 0) or the max.
+            # If multiple lines, split lines.
+            lines = output.strip().split('\n')
+            if lines:
+                total_mib = int(lines[0]) # Use first GPU
+                return total_mib * 1024 * 1024
+
+        # Check for macOS (Unified Memory) - rough estimate (75% of total RAM usually available for GPU)
+        if platform.system() == "Darwin":
+            output = subprocess.check_output(["sysctl", "-n", "hw.memsize"], encoding="utf-8")
+            total_mem = int(output.strip())
+            return int(total_mem * 0.75)
+
+    except Exception:
+        pass
+    return None
+
+
 def get_available_models_list():
+    # Helper to just return list of names (used internally for fallback logic)
     try:
         res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
         if res.status_code == 200:
@@ -53,10 +85,40 @@ def get_available_models_list():
     except:
         return []
 
+
 @app.get("/models")
 def get_models():
-    models = get_available_models_list()
-    return {"models": models}
+    # Helper to return detailed model info for the frontend
+    vram = get_gpu_vram()
+    try:
+        res = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
+        if res.status_code == 200:
+            data = res.json()
+            models_list = []
+            for m in data.get('models', []):
+                size_bytes = m.get('size', 0)
+                fits_vram = True
+
+                # If we detected VRAM, check if model fits
+                if vram is not None:
+                    # heuristic: model size * 1.2 for context/overhead
+                    required = size_bytes * 1.2
+                    fits_vram = required < vram
+
+                models_list.append({
+                    "name": m['name'],
+                    "size_bytes": size_bytes,
+                    "size_gb": round(size_bytes / (1024**3), 1),
+                    "fits": fits_vram
+                })
+
+            # Sort by name
+            models_list.sort(key=lambda x: x['name'])
+
+            return {"models": models_list, "vram_detected": vram is not None}
+        return {"models": []}
+    except:
+        return {"models": []}
 
 
 @app.post("/expand")
