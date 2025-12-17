@@ -88,6 +88,15 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   const [isThinking, setIsThinking] = useState(false);
   const scrollRef = useRef(null);
   const endRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
+  const closeLesson = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setLessonData(null);
+  };
 
   useEffect(() => {
     if (endRef.current) {
@@ -101,7 +110,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        if (lessonData) setLessonData(null);
+        if (lessonData) closeLesson();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -151,21 +160,64 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   };
 
   const openLesson = async (nodeName, mode) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setAnalyzingNode(nodeName);
-    setLessonData({ content: null, mode: mode, isLoading: true });
+    setLessonData({ content: "", mode: mode, isLoading: true });
 
     try {
       const contextPath = columns.map(c => c.selectedNode).filter(Boolean).join(" > ");
-      const res = await axios.post(`${BASE_URL}/analyze`, {
-        node: nodeName,
-        context: contextPath,
-        model: model,
-        mode: mode
+      const response = await fetch(`${BASE_URL}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          node: nodeName,
+          context: contextPath,
+          model: model,
+          mode: mode
+        }),
+        signal: controller.signal
       });
-      setLessonData({ content: res.data.content, mode: mode, isLoading: false });
+
+      if (!response.body) throw new Error("No response body");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          setLessonData(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              content: prev.content + chunk,
+              isLoading: false
+            };
+          });
+        }
+      }
+      setLessonData(prev => prev ? { ...prev, isLoading: false } : null);
+
     } catch (err) {
-      setLessonData({ content: "Connection lost.", mode: mode, isLoading: false });
-      addToast("Failed to load lesson", "error");
+      if (err.name === 'AbortError') {
+        console.log('Lesson generation aborted');
+      } else {
+        console.error(err);
+        setLessonData({ content: "Connection lost.", mode: mode, isLoading: false });
+        addToast("Failed to load lesson", "error");
+      }
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
   };
 
@@ -243,7 +295,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
             <motion.div
                 className="lesson-backdrop"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                onClick={() => setLessonData(null)}
+                onClick={closeLesson}
             />
             <motion.div
                 className="lesson-panel"
@@ -293,7 +345,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         navigator.clipboard.writeText(lessonData.content);
                         addToast("Lesson text copied to clipboard", "success");
                     }}>COPY TEXT</button>
-                    <button onClick={() => setLessonData(null)}>CLOSE</button>
+                    <button onClick={closeLesson}>CLOSE</button>
                 </div>
             </motion.div>
           </>
