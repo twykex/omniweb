@@ -21,9 +21,37 @@ export const HistoryTimeline = ({ jsonString }) => {
             } catch (e) {
                 // Failed to parse, try to extract array
                 const start = cleanJson.indexOf('[');
-                const end = cleanJson.lastIndexOf(']') + 1;
-                if (start !== -1 && end !== -1) {
-                    parsed = JSON.parse(cleanJson.substring(start, end));
+                if (start !== -1) {
+                    // Try to find the matching closing bracket robustly
+                    let stack = 0;
+                    let end = -1;
+                    let inString = false;
+                    for (let i = start; i < cleanJson.length; i++) {
+                        const char = cleanJson[i];
+                        if (char === '"' && cleanJson[i-1] !== '\\') inString = !inString;
+                        if (!inString) {
+                            if (char === '[') stack++;
+                            else if (char === ']') {
+                                stack--;
+                                if (stack === 0) {
+                                    end = i + 1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (end !== -1) {
+                        parsed = JSON.parse(cleanJson.substring(start, end));
+                    } else {
+                        // Fallback to last bracket if stack method fails or is incomplete
+                        const fallbackEnd = cleanJson.lastIndexOf(']') + 1;
+                        if (fallbackEnd > start) {
+                             parsed = JSON.parse(cleanJson.substring(start, fallbackEnd));
+                        } else {
+                            throw e;
+                        }
+                    }
                 } else {
                     throw e;
                 }
@@ -33,9 +61,9 @@ export const HistoryTimeline = ({ jsonString }) => {
 
             if (Array.isArray(parsed)) {
                 parsedEvents = parsed;
-            } else if (parsed.events && Array.isArray(parsed.events)) {
+            } else if (parsed && parsed.events && Array.isArray(parsed.events)) {
                 parsedEvents = parsed.events;
-            } else {
+            } else if (parsed && typeof parsed === 'object') {
                  // Try to convert object to array
                  parsedEvents = Object.keys(parsed).map(key => {
                     const val = parsed[key];
@@ -67,9 +95,22 @@ export const HistoryTimeline = ({ jsonString }) => {
             return text.includes(filterText.toLowerCase());
         });
 
+        const parseYear = (yearStr) => {
+            const str = String(yearStr).toUpperCase().replace(/,/g, "").trim();
+            let multiplier = 1;
+            if (str.includes("BC") || str.includes("B.C")) {
+                multiplier = -1;
+            }
+            const match = str.match(/\d+/);
+            if (match) {
+                return parseInt(match[0]) * multiplier;
+            }
+            return 0; // Default to 0
+        };
+
         filtered.sort((a, b) => {
-            const yearA = parseInt(String(a.year).replace(/\D/g, "")) || 0;
-            const yearB = parseInt(String(b.year).replace(/\D/g, "")) || 0;
+            const yearA = parseYear(a.year);
+            const yearB = parseYear(b.year);
             return sortOrder === "asc" ? yearA - yearB : yearB - yearA;
         });
 

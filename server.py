@@ -48,6 +48,10 @@ def robust_json_parser(text):
     start_obj = text.find('{')
     start_arr = text.find('[')
 
+    # Early exit if no JSON structure is found
+    if start_obj == -1 and start_arr == -1:
+        return text
+
     start = -1
     if start_obj != -1 and start_arr != -1:
         start = min(start_obj, start_arr)
@@ -56,6 +60,42 @@ def robust_json_parser(text):
     elif start_arr != -1:
         start = start_arr
 
+    stack = []
+    in_string = False
+    escape = False
+
+    for i in range(start, len(text)):
+        char = text[i]
+
+        if escape:
+            escape = False
+            continue
+
+        if char == '\\':
+            escape = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            continue
+
+        if not in_string:
+            if char == '{':
+                stack.append('{')
+            elif char == '[':
+                stack.append('[')
+            elif char == '}':
+                if stack and stack[-1] == '{':
+                    stack.pop()
+                    if not stack:
+                        return text[start:i+1]
+            elif char == ']':
+                if stack and stack[-1] == '[':
+                    stack.pop()
+                    if not stack:
+                        return text[start:i+1]
+
+    # Fallback: if we didn't find a clean end, revert to the "last brace" strategy as a last resort
     if start != -1:
         try:
             # Attempt to parse one valid JSON object starting from 'start'
@@ -71,6 +111,7 @@ def robust_json_parser(text):
         end_obj = text.rfind('}') + 1
         end_arr = text.rfind(']') + 1
         end = max(end_obj, end_arr)
+
         if end > start:
             return text[start:end]
 
@@ -289,7 +330,10 @@ def analyze_node(req: AnalysisRequest):
         Format: Markdown with headers (#, ##), bolding (**), and lists (-).
         
         VISUAL AIDS:
-        If a diagram or image would significantly improve understanding (e.g., complex anatomy, mechanical systems, or specific scientific cycles), insert a tag on a new line in the format: [Image of <query>].
+        If a diagram or image would significantly improve understanding (e.g., complex anatomy, mechanical systems, or specific scientific cycles), insert a tag on a new line in the format: 
+
+[Image of <query>]
+.
         - Use sparingly: Only trigger an image if it adds instructional value.
         - Be specific in the query inside the brackets.
         - Place the tag immediately before or after the relevant explanation.
