@@ -98,7 +98,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   const [columns, setColumns] = useState([{ 
     id: "root", 
     selectedNode: null, 
-    nodes: [{ name: initialTopic, desc: "The starting point of your journey.", status: "concept" }] 
+    nodes: [{ name: initialTopic, desc: "The starting point of your journey.", status: "concept" }],
+    seenNodes: [initialTopic]
   }]);
 
   const [lessonData, setLessonData] = useState(null);
@@ -164,7 +165,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
         setColumns([...newCols, { 
           id: node.name, 
           selectedNode: null, 
-          nodes: res.data.children 
+          nodes: res.data.children,
+          seenNodes: res.data.children.map(c => c.name)
         }]);
       } else {
         addToast("Could not expand this topic. Try again.", "warning");
@@ -173,6 +175,51 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
         console.error(err);
         addToast("Failed to expand node", "error");
     } finally { setIsThinking(false); }
+  };
+
+  const handleRegenerate = async (colIndex) => {
+    if (isThinking) return;
+    if (colIndex === 0) return;
+
+    const col = columns[colIndex];
+    const parentNodeName = col.id;
+    const parentCols = columns.slice(0, colIndex);
+    const contextPath = parentCols.map(c => c.selectedNode).filter(Boolean).join(" > ");
+
+    const currentSeen = col.seenNodes || col.nodes.map(n => n.name);
+    const parentSiblings = columns[colIndex - 1].nodes.map(n => n.name);
+    const avoidList = [...new Set([...currentSeen, ...parentSiblings, parentNodeName])];
+
+    setIsThinking(true);
+    try {
+        const res = await axios.post(`${BASE_URL}/expand`, {
+            node: parentNodeName,
+            context: contextPath,
+            model: model,
+            temperature: 0.7,
+            recent_nodes: avoidList
+        });
+
+        if (res.data.children && res.data.children.length > 0) {
+            // Truncate future columns as we are changing the current level's nodes
+            const newCols = columns.slice(0, colIndex + 1);
+            newCols[colIndex] = {
+                ...col,
+                selectedNode: null, // Clear selection as the node might be gone
+                nodes: res.data.children,
+                seenNodes: [...currentSeen, ...res.data.children.map(c => c.name)]
+            };
+            setColumns(newCols);
+            addToast("Regenerated level!", "success");
+        } else {
+             addToast("No new unique topics found.", "warning");
+        }
+    } catch (err) {
+        console.error(err);
+        addToast("Regeneration failed", "error");
+    } finally {
+        setIsThinking(false);
+    }
   };
 
   const openLesson = async (nodeName, mode) => {
@@ -298,6 +345,15 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
           >
             <div className="column-header">
               LEVEL {colIdx + 1}
+              {colIdx > 0 && (
+                <button
+                  className="regenerate-btn"
+                  onClick={() => handleRegenerate(colIdx)}
+                  title="Regenerate with new topics"
+                >
+                  ↻
+                </button>
+              )}
             </div>
             <div className="node-list">
               {col.nodes.map((node) => (
@@ -1054,7 +1110,15 @@ const GlobalCSS = () => (
     .miller-columns-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
     .column { min-width: var(--col-width); width: var(--col-width); display: flex; flex-direction: column; }
-    .column-header { font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 16px; letter-spacing: 1.5px; opacity: 0.6; }
+    .column-header {
+      font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 16px;
+      letter-spacing: 1.5px; opacity: 0.6; display: flex; justify-content: space-between; align-items: center;
+    }
+    .regenerate-btn {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 14px; transition: color 0.2s; padding: 0; line-height: 1;
+    }
+    .regenerate-btn:hover { color: var(--primary); }
     .node-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 100px; }
 
     /* NODE CARDS */
