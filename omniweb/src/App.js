@@ -11,6 +11,13 @@ const App = () => {
   const [selectedModel, setSelectedModel] = useState("");
   const [loadingModels, setLoadingModels] = useState(true);
   const [startTopic, setStartTopic] = useState("");
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = (msg, type = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  };
 
   useEffect(() => {
     const fetchModels = async () => {
@@ -48,9 +55,11 @@ const App = () => {
             model={selectedModel}
             initialTopic={startTopic}
             onExit={() => setHasStarted(false)}
+            addToast={addToast}
           />
         )}
       </AnimatePresence>
+      <ToastContainer toasts={toasts} />
       <GlobalCSS />
     </div>
   );
@@ -67,7 +76,7 @@ const BackgroundEngine = () => (
 );
 
 // --- WORKSPACE COMPONENT ---
-const LearningWorkspace = ({ model, initialTopic, onExit }) => {
+const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   const [columns, setColumns] = useState([{
     id: "root",
     selectedNode: null,
@@ -87,6 +96,17 @@ const LearningWorkspace = ({ model, initialTopic, onExit }) => {
       }, 100);
     }
   }, [columns, isThinking]);
+
+  // Handle Escape Key to close lesson panel
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (lessonData) setLessonData(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lessonData]);
 
   const handleNodeClick = async (colIndex, node) => {
     if (columns[colIndex].selectedNode === node.name) return;
@@ -113,8 +133,10 @@ const LearningWorkspace = ({ model, initialTopic, onExit }) => {
           nodes: res.data.children
         }]);
       }
-    } catch (err) { console.error(err); }
-    finally { setIsThinking(false); }
+    } catch (err) {
+        console.error(err);
+        addToast("Failed to expand node", "error");
+    } finally { setIsThinking(false); }
   };
 
   const openLesson = async (nodeName, mode) => {
@@ -132,8 +154,18 @@ const LearningWorkspace = ({ model, initialTopic, onExit }) => {
       setLessonData({ content: res.data.content, mode: mode, isLoading: false });
     } catch (err) {
       setLessonData({ content: "Connection lost.", mode: mode, isLoading: false });
+      addToast("Failed to load lesson", "error");
     }
   };
+
+  const handleBreadcrumbClick = (index) => {
+      // Keep columns up to index + 1 (the children of the clicked breadcrumb's column selection)
+      if (index + 1 < columns.length) {
+          setColumns(columns.slice(0, index + 2));
+      }
+  };
+
+  const readingTime = lessonData && lessonData.content ? Math.ceil(lessonData.content.split(/\s+/).length / 200) : 0;
 
   return (
     <motion.div
@@ -148,7 +180,14 @@ const LearningWorkspace = ({ model, initialTopic, onExit }) => {
           {columns.map((col, i) => (
              col.selectedNode && (
                <React.Fragment key={i}>
-                 <span className="crumb">{col.selectedNode}</span>
+                 <span
+                    className="crumb"
+                    onClick={() => handleBreadcrumbClick(i)}
+                    style={{cursor: 'pointer'}}
+                    title="Navigate to this level"
+                 >
+                    {col.selectedNode}
+                 </span>
                  <span className="sep">/</span>
                </React.Fragment>
              )
@@ -203,6 +242,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit }) => {
                 <div className="panel-header">
                     <div className="panel-kicker">LEARNING MODULE</div>
                     <h3>{analyzingNode}</h3>
+                    {!lessonData.isLoading && <div className="panel-meta">{readingTime} MIN READ</div>}
                 </div>
 
                 <div className="panel-tabs">
@@ -238,7 +278,10 @@ const LearningWorkspace = ({ model, initialTopic, onExit }) => {
                 </div>
 
                 <div className="panel-footer">
-                    <button onClick={() => navigator.clipboard.writeText(lessonData.content)}>COPY TEXT</button>
+                    <button onClick={() => {
+                        navigator.clipboard.writeText(lessonData.content);
+                        addToast("Lesson text copied to clipboard", "success");
+                    }}>COPY TEXT</button>
                     <button onClick={() => setLessonData(null)}>CLOSE</button>
                 </div>
             </motion.div>
@@ -308,6 +351,27 @@ const SkeletonColumn = () => (
                 </div>
             ))}
         </div>
+    </div>
+);
+
+const ToastContainer = ({ toasts }) => (
+    <div className="toast-container">
+        <AnimatePresence>
+            {toasts.map(toast => (
+                <motion.div
+                    key={toast.id}
+                    layout
+                    initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className={`toast ${toast.type}`}
+                >
+                    {toast.type === 'success' && <span style={{color: 'currentColor'}}>✓</span>}
+                    {toast.type === 'error' && <span style={{color: 'currentColor'}}>!</span>}
+                    <span style={{color: '#fff'}}>{toast.msg}</span>
+                </motion.div>
+            ))}
+        </AnimatePresence>
     </div>
 );
 
@@ -487,8 +551,13 @@ const GlobalCSS = () => (
     .panel-kicker { font-size: 11px; font-weight: 700; color: var(--secondary); letter-spacing: 2px; margin-bottom: 12px; text-transform: uppercase; }
     .panel-header h3 { font-family: 'Playfair Display', serif; font-size: 42px; margin: 0; color: #fff; line-height: 1.1; letter-spacing: -0.5px; }
 
+    /* --- CONFLICT RESOLVED HERE --- */
+    .panel-meta { font-size: 10px; color: var(--text-muted); letter-spacing: 1px; margin-top: 5px; }
+
     .panel-tabs { display: flex; padding: 0 50px; border-bottom: 1px solid var(--glass-border); gap: 30px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
     .panel-tabs::-webkit-scrollbar { display: none; }
+    /* ------------------------------ */
+
     .panel-tabs button {
         background: none; border: none; padding: 20px 0; color: var(--text-muted);
         font-size: 11px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; letter-spacing: 1px;
@@ -518,6 +587,20 @@ const GlobalCSS = () => (
     .sk-line { background: rgba(255,255,255,0.08); border-radius: 4px; animation: pulse 1.5s infinite ease-in-out; }
     .w-100 { width: 100%; } .w-75 { width: 75%; } .w-50 { width: 50%; }
     @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 0.6; } 100% { opacity: 0.3; } }
+
+    /* TOASTS */
+    .toast-container {
+        position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+        display: flex; flex-direction: column; gap: 10px; z-index: 200; pointer-events: none;
+    }
+    .toast {
+        background: rgba(20, 20, 25, 0.9); border: 1px solid var(--glass-border);
+        padding: 12px 24px; border-radius: 50px; color: #fff; font-size: 13px; font-weight: 500;
+        backdrop-filter: blur(10px); box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        display: flex; align-items: center; gap: 10px; pointer-events: auto;
+    }
+    .toast.success { border-color: #34d399; color: #34d399; }
+    .toast.error { border-color: #f87171; color: #f87171; }
   `}</style>
 );
 
