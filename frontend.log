@@ -2,9 +2,9 @@
 > omniweb@0.1.0 start
 > react-scripts start
 
-(node:2363) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:2316) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
 (Use `node --trace-deprecation ...` to show where the warning was created)
-(node:2363) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:2316) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
 Starting the development server...
 
 Compiled successfully!
@@ -17,34 +17,4 @@ You can now view omniweb in the browser.
 Note that the development build is not optimized.
 To create a production build, use npm run build.
 
-webpack compiled successfully
-Failed to compile.
-
-Error: ENOENT: no such file or directory, open '/app/omniweb/node_modules/axios/index.js'
-LOG from webpack.FileSystemInfo
-<w> Managed item /app/omniweb/node_modules/axios isn't a directory or doesn't contain a package.json (see snapshot.managedPaths option)
-+ 8 hidden lines
-
-ERROR in ./node_modules/axios/index.js
-Module build failed (from ./node_modules/source-map-loader/dist/cjs.js):
-Error: ENOENT: no such file or directory, open '/app/omniweb/node_modules/axios/index.js'
-
-webpack compiled with 1 error
-Compiling...
-Failed to compile.
-
-Error: ENOENT: no such file or directory, open '/app/omniweb/node_modules/axios/index.js'
-ERROR in ./node_modules/axios/index.js
-Module build failed (from ./node_modules/source-map-loader/dist/cjs.js):
-Error: ENOENT: no such file or directory, open '/app/omniweb/node_modules/axios/index.js'
-
-webpack compiled with 1 error
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
 webpack compiled successfully
