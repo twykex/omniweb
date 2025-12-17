@@ -69,9 +69,21 @@ export const QuizInterface = ({ content, quizConfig, onNewQuiz }) => {
           let stack = 0;
           let end = -1;
           let inString = false;
+          let isEscaped = false;
           for (let i = start; i < jsonStr.length; i++) {
               const char = jsonStr[i];
-              if (char === '"' && jsonStr[i-1] !== '\\') inString = !inString;
+              if (isEscaped) {
+                  isEscaped = false;
+                  continue;
+              }
+              if (char === '\\') {
+                  isEscaped = true;
+                  continue;
+              }
+              if (char === '"') {
+                  inString = !inString;
+                  continue;
+              }
               if (!inString) {
                   if (char === '{') stack++;
                   else if (char === '}') {
