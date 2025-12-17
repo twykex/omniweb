@@ -31,6 +31,7 @@ const App = () => {
       const models = res.data.models || [];
       setAvailableModels(models);
 
+      // Smart selection: Prefer fitting models, then specific families
       const smartModel = models.find(m => 
           (m.name.includes("llama3") || m.name.includes("mistral") || m.name.includes("gpt")) && m.fits
       ) || models.find(m => m.fits) || models[0];
@@ -145,6 +146,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     try {
       const contextPath = newCols.map(c => c.selectedNode).filter(Boolean).join(" > ");
       
+      // Send recent nodes to avoid duplicates (from Main branch logic)
       const recentNodes = [];
       if (columns[colIndex]) columns[colIndex].nodes.forEach(n => recentNodes.push(n.name));
       if (colIndex > 0 && columns[colIndex - 1]) columns[colIndex - 1].nodes.forEach(n => recentNodes.push(n.name));
@@ -182,6 +184,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
     try {
       const contextPath = columns.map(c => c.selectedNode).filter(Boolean).join(" > ");
+      
+      // Use fetch for Streaming (from Main branch logic)
       const response = await fetch(`${BASE_URL}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -500,6 +504,22 @@ const ToastContainer = ({ toasts }) => (
     </div>
 );
 
+// --- COMPONENT MERGES (Redesign + Functionality) ---
+
+const FeatureCard = ({ icon, title, desc }) => (
+  <motion.div 
+    className="feature-card"
+    variants={{
+      hidden: { opacity: 0, y: 20 },
+      visible: { opacity: 1, y: 0 }
+    }}
+  >
+    <div className="feature-icon">{icon}</div>
+    <h3>{title}</h3>
+    <p>{desc}</p>
+  </motion.div>
+);
+
 const ModelSelector = ({ models, selected, onSelect }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -559,34 +579,32 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
 
   return (
     <motion.div 
-      className="landing-container"
+      className="landing-container custom-scroll"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
     >
       <div className="landing-content">
-        <motion.h1 
+        <motion.div 
           initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1, duration: 0.8 }}
-          className="hero-title"
         >
-          Omni<span className="accent">Web</span>
-        </motion.h1>
-        
-        <motion.p 
-          initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.8 }}
-          className="hero-subtitle"
-        >
-          The Infinite Learning Engine
-        </motion.p>
+          <h1 className="hero-title">
+            Omni<span className="accent">Web</span>
+          </h1>
+          <p className="hero-subtitle">
+            The Infinite Learning Engine.<br/>
+            Designed for students, researchers, and the endlessly curious.
+          </p>
+        </motion.div>
 
         <motion.div 
           className="search-wrapper"
-          initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5 }}
+          initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.3 }}
         >
           <input 
               ref={inputRef}
               type="text" 
               value={startTopic}
               onChange={(e) => setStartTopic(e.target.value)}
-              placeholder="Search any topic (e.g., Black Holes, Jazz)..."
+              placeholder="What do you want to learn today?"
               onKeyDown={(e) => e.key === 'Enter' && startTopic.trim() && onStart()}
               autoFocus
               disabled={backendError}
@@ -596,6 +614,7 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
           </button>
         </motion.div>
 
+        {/* Re-integrated Suggested Topics from Main */}
         <motion.div 
           className="suggested-topics"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
@@ -616,11 +635,11 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
         </motion.div>
 
         <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
             className="landing-footer"
         >
             {isLoading ? (
-                <span className="status-connecting">INITIALIZING SYSTEM...</span>
+                <span className="status-connecting">INITIALIZING BRAIN...</span>
             ) : backendError ? (
                 <div className="error-state">
                   <span className="error-msg">⚠️ Backend Offline</span>
@@ -630,6 +649,43 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
             ) : (
                 <ModelSelector models={models} selected={selected} onSelect={onSelect} />
             )}
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
+          className="kicker"
+        >
+          THE NEW AGE OF LEARNING
+        </motion.div>
+
+        <motion.div 
+          className="features-grid"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            visible: { transition: { staggerChildren: 0.1, delayChildren: 0.8 } }
+          }}
+        >
+          <FeatureCard 
+              icon="🌌" 
+              title="Infinite Recursion" 
+              desc="Recursively break down topics forever. There is no limit to how deep you can go." 
+          />
+          <FeatureCard 
+              icon="🧠" 
+              title="Visual Knowledge" 
+              desc="Navigate ideas spatially with Miller Columns. See how every concept connects." 
+          />
+          <FeatureCard 
+              icon="🎓" 
+              title="Deep Insights" 
+              desc="Get professor-style explanations, historical context, and real-world impact instantly." 
+          />
+          <FeatureCard 
+              icon="🛡️" 
+              title="Local & Private" 
+              desc="Powered by local LLMs running on your machine. Your learning journey is 100% private." 
+          />
         </motion.div>
       </div>
     </motion.div>
@@ -680,14 +736,34 @@ const GlobalCSS = () => (
     }
 
     /* LANDING */
-    .landing-container { height: 100vh; display: flex; justify-content: center; align-items: center; position: relative; z-index: 10; }
-    .landing-content { text-align: center; width: 100%; max-width: 650px; padding: 20px; }
+    .landing-container { 
+        height: 100vh; 
+        width: 100%; 
+        overflow-y: auto; 
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        position: relative; 
+        z-index: 10; 
+        padding: 40px 20px;
+        box-sizing: border-box;
+    }
+    .landing-content { 
+        margin: auto; 
+        text-align: center; 
+        width: 100%; 
+        max-width: 900px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
 
     .hero-title { font-family: 'Playfair Display', serif; font-size: 80px; margin: 0; font-weight: 600; color: #fff; letter-spacing: -2px; }
     .accent { background: linear-gradient(135deg, #a78bfa, #22d3ee); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-style: italic; }
-    .hero-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 50px; font-weight: 300; letter-spacing: 0.5px; }
+    .hero-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 40px; font-weight: 300; letter-spacing: 0.5px; line-height: 1.6; }
 
     .search-wrapper { 
+        width: 100%; max-width: 600px;
         position: relative; background: rgba(255,255,255,0.03); padding: 6px; border-radius: 100px;
         border: 1px solid var(--glass-border); display: flex; transition: all 0.3s; backdrop-filter: blur(10px);
     }
@@ -695,6 +771,37 @@ const GlobalCSS = () => (
     .search-wrapper input { flex: 1; background: transparent; border: none; padding: 18px 30px; font-size: 18px; color: #fff; font-family: 'Inter'; outline: none; }
     .go-btn { width: 54px; height: 54px; border-radius: 50%; border: none; background: #fff; color: #000; font-size: 20px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
     .go-btn:hover { transform: scale(1.05); background: #e0e7ff; }
+
+    .landing-footer { margin-top: 30px; margin-bottom: 60px; }
+    .dot.online { width: 6px; height: 6px; background: #34d399; border-radius: 50%; box-shadow: 0 0 8px #34d399; }
+
+    .kicker { font-size: 11px; font-weight: 700; letter-spacing: 3px; color: var(--secondary); margin-bottom: 30px; text-transform: uppercase; opacity: 0.8; }
+
+    .features-grid { 
+        display: grid; 
+        grid-template-columns: repeat(1, 1fr); 
+        gap: 20px; 
+        width: 100%; 
+    }
+    @media (min-width: 640px) { .features-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1024px) { .features-grid { grid-template-columns: repeat(4, 1fr); } }
+
+    .feature-card { 
+        background: rgba(255, 255, 255, 0.02); 
+        border: 1px solid var(--glass-border); 
+        border-radius: 16px; 
+        padding: 24px 20px; 
+        text-align: left; 
+        transition: transform 0.3s, background 0.3s; 
+    }
+    .feature-card:hover { 
+        background: rgba(255, 255, 255, 0.05); 
+        transform: translateY(-5px); 
+        border-color: rgba(255, 255, 255, 0.15); 
+    }
+    .feature-icon { font-size: 28px; margin-bottom: 16px; }
+    .feature-card h3 { color: #fff; font-size: 16px; margin: 0 0 8px 0; font-weight: 600; letter-spacing: -0.2px; }
+    .feature-card p { color: var(--text-muted); font-size: 13px; margin: 0; line-height: 1.6; }
 
     .suggested-topics {
         margin-top: 24px;
@@ -711,9 +818,6 @@ const GlobalCSS = () => (
         background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.3);
         transform: translateY(-2px);
     }
-
-    .landing-footer { margin-top: 40px; min-height: 50px; }
-    .dot.online { width: 6px; height: 6px; background: #34d399; border-radius: 50%; box-shadow: 0 0 8px #34d399; }
 
     .error-state { display: flex; flex-direction: column; align-items: center; gap: 12px; animation: fadeIn 0.5s ease; }
     .error-msg { color: #f87171; font-weight: 600; font-size: 14px; letter-spacing: 0.5px; }
