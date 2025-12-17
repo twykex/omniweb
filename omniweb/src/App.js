@@ -531,56 +531,82 @@ const ModelSelector = ({ models, selected, onSelect }) => {
   );
 };
 
-const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic }) => (
-  <motion.div
-    className="landing-container"
-    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-  >
-    <div className="landing-content">
-      <motion.h1
-        initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1, duration: 0.8 }}
-        className="hero-title"
-      >
-        Omni<span className="accent">Web</span>
-      </motion.h1>
+const SUGGESTED_TOPICS = ["Neural Networks", "The Renaissance", "Mars Colonization", "Jazz History"];
 
-      <motion.p
-        initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.8 }}
-        className="hero-subtitle"
-      >
-        The Infinite Learning Engine
-      </motion.p>
+const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic }) => {
+  const inputRef = useRef(null);
 
-      <motion.div
-        className="search-wrapper"
-        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5 }}
-      >
-        <input
-            type="text"
-            value={startTopic}
-            onChange={(e) => setStartTopic(e.target.value)}
-            placeholder="Search any topic (e.g., Black Holes, Jazz)..."
-            onKeyDown={(e) => e.key === 'Enter' && startTopic.trim() && onStart()}
-            autoFocus
-        />
-        <button onClick={onStart} disabled={isLoading || !startTopic.trim()} className="go-btn">
-             ➜
-        </button>
-      </motion.div>
+  return (
+    <motion.div
+      className="landing-container"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    >
+      <div className="landing-content">
+        <motion.h1
+          initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1, duration: 0.8 }}
+          className="hero-title"
+        >
+          Omni<span className="accent">Web</span>
+        </motion.h1>
 
-      <motion.div
-         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
-         className="landing-footer"
-      >
-         {isLoading ? (
-             <span className="status-connecting">INITIALIZING SYSTEM...</span>
-         ) : (
-             <ModelSelector models={models} selected={selected} onSelect={onSelect} />
-         )}
-      </motion.div>
-    </div>
-  </motion.div>
-);
+        <motion.p
+          initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.8 }}
+          className="hero-subtitle"
+        >
+          The Infinite Learning Engine
+        </motion.p>
+
+        <motion.div
+          className="search-wrapper"
+          initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5 }}
+        >
+          <input
+              ref={inputRef}
+              type="text"
+              value={startTopic}
+              onChange={(e) => setStartTopic(e.target.value)}
+              placeholder="Search any topic (e.g., Black Holes, Jazz)..."
+              onKeyDown={(e) => e.key === 'Enter' && startTopic.trim() && onStart()}
+              autoFocus
+          />
+          <button onClick={onStart} disabled={isLoading || !startTopic.trim()} className="go-btn">
+               ➜
+          </button>
+        </motion.div>
+
+        <motion.div
+          className="suggested-topics"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
+        >
+          <span>Try:</span>
+          {SUGGESTED_TOPICS.map(topic => (
+            <button
+              key={topic}
+              className="topic-tag"
+              onClick={() => {
+                setStartTopic(topic);
+                inputRef.current?.focus();
+              }}
+            >
+              {topic}
+            </button>
+          ))}
+        </motion.div>
+
+        <motion.div
+           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
+           className="landing-footer"
+        >
+           {isLoading ? (
+               <span className="status-connecting">INITIALIZING SYSTEM...</span>
+           ) : (
+               <ModelSelector models={models} selected={selected} onSelect={onSelect} />
+           )}
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+};
 
 // --- CSS STYLES ---
 
@@ -635,6 +661,36 @@ const GlobalCSS = () => (
     .search-wrapper input { flex: 1; background: transparent; border: none; padding: 18px 30px; font-size: 18px; color: #fff; font-family: 'Inter'; outline: none; }
     .go-btn { width: 54px; height: 54px; border-radius: 50%; border: none; background: #fff; color: #000; font-size: 20px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
     .go-btn:hover { transform: scale(1.05); background: #e0e7ff; }
+
+    .suggested-topics {
+        margin-top: 24px;
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+        font-size: 14px;
+        color: var(--text-muted);
+    }
+    .topic-tag {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--glass-border);
+        padding: 8px 16px;
+        border-radius: 20px;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: 'Inter', sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+    .topic-tag:hover {
+        background: rgba(255,255,255,0.1);
+        color: #fff;
+        border-color: rgba(255,255,255,0.3);
+        transform: translateY(-2px);
+    }
 
     .landing-footer { margin-top: 40px; }
     .dot.online { width: 6px; height: 6px; background: #34d399; border-radius: 50%; box-shadow: 0 0 8px #34d399; }
