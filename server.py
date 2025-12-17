@@ -75,8 +75,8 @@ def random_topic(req: RandomTopicRequest):
 def expand_node(req: ExpandRequest):
     print(f"\n⚡ Expanding Topic: [{req.node}]")
 
-    context_parts = req.context.split(" > ")
-    short_context = " > ".join(context_parts[-4:])
+    # Use full context to ensure deep relevance
+    full_context = req.context
 
     exclusion_text = ""
     if req.recent_nodes:
@@ -84,9 +84,11 @@ def expand_node(req: ExpandRequest):
 
     system_prompt_template = """
     You are an Expert Curriculum Designer.
-    Current Subject: {node} (Context: {context})
+    Current Subject: {node}
+    Full Context Path: {context}
 
     TASK: Identify 5 distinct learning paths or sub-topics for a student studying "{node}".
+    IMPORTANT: The sub-topics must be directly related to "{node}" specifically within the context of "{context}". Ensure the progression is logical and hierarchical.
 
     RULES:
     1. "name": Clear, academic terminology (Max 4 words). Title Case.
@@ -100,7 +102,7 @@ def expand_node(req: ExpandRequest):
 
     system_prompt = system_prompt_template.format(
         node=req.node,
-        context=short_context,
+        context=full_context,
         exclusion=exclusion_text
     )
 
@@ -195,6 +197,8 @@ def analyze_node(req: AnalysisRequest):
         Topic: {req.node}
         Task: {prompts.get(req.mode)}
 
+        CRITICAL: The events must be strictly relevant to the provided Context path.
+
         Output format: Pure JSON Array. No Markdown. Do not use code blocks.
         Example: [{{ "year": "1905", "title": "Special Relativity", "description": "Einstein publishes his paper..." }}]
         """
@@ -210,6 +214,8 @@ def analyze_node(req: AnalysisRequest):
         Topic: {req.node}
         Task: {prompts.get(req.mode)}
 
+        CRITICAL: The questions must be based on the intersection of the Topic and the Context.
+
         Difficulty Guidance: {difficulty_guidance}
 
         Style: Engaging, Professor-like, Clear.
@@ -220,6 +226,8 @@ def analyze_node(req: AnalysisRequest):
         Context: {req.context}
         Topic: {req.node}
         Task: {prompts.get(req.mode)}
+
+        CRITICAL: All explanations and content must be strictly framed within the provided Context. If the Topic is ambiguous, resolve it by using the Context.
 
         Style: Engaging, Professor-like, Clear.
         Format: Markdown with headers (#, ##), bolding (**), and lists (-).
