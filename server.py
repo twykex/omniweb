@@ -26,6 +26,10 @@ def get_models():
             data = res.json()
             models_list = []
             for m in data.get('models', []):
+                name = m.get('name')
+                if not name:
+                    continue
+
                 size_bytes = m.get('size', 0)
                 fits_vram = True
 
@@ -34,7 +38,7 @@ def get_models():
                     fits_vram = required < vram
 
                 models_list.append({
-                    "name": m['name'],
+                    "name": name,
                     "size_bytes": size_bytes,
                     "size_gb": round(size_bytes / (1024**3), 1),
                     "fits": fits_vram
@@ -144,7 +148,8 @@ def expand_node(req: ExpandRequest):
     # Try to find a fallback that is NOT the current model
     fallback_candidates = [m for m in available_models if m != req.model]
 
-    for fallback_model in fallback_candidates:
+    # Limit to max 2 fallback attempts to avoid long waits
+    for fallback_model in fallback_candidates[:2]:
         print(f"🔄 Switching to fallback model: {fallback_model}")
         data = call_llm(fallback_model, system_prompt)
         data = filter_children_response(data, req.recent_nodes)
@@ -156,7 +161,8 @@ def expand_node(req: ExpandRequest):
 
 @app.post("/analyze")
 def analyze_node(req: AnalysisRequest):
-    print(f"\n📚 Teaching [{req.node}] Mode: {req.mode}")
+    # Normalize mode
+    req.mode = req.mode.lower() if req.mode else "explain"
 
     prompts = {
         "explain": f"Teach '{req.node}' to a beginner. Use a clear analogy (formatted as a > blockquote) to explain the core concept. Then detail how it works.",
@@ -171,6 +177,12 @@ def analyze_node(req: AnalysisRequest):
         "sources": f"List 5-10 essential books, research papers, or primary sources to learn more about '{req.node}'. Format as a Markdown list with brief annotations explaining why each source is important.",
         "quiz": f"Create a {req.num_questions}-question multiple choice quiz about '{req.node}'. Difficulty: {req.difficulty}. Return ONLY valid JSON. The JSON should be an object with a key 'questions' which is a list of objects. Each question object must have: 'question' (string), 'options' (list of 4 strings), 'correct_index' (integer 0-3), and 'explanation' (string). Do not use markdown formatting."
     }
+
+    if req.mode not in prompts:
+        print(f"⚠️ Invalid mode '{req.mode}' requested. Defaulting to 'explain'.")
+        req.mode = "explain"
+
+    print(f"\n📚 Teaching [{req.node}] Mode: {req.mode}")
 
     if req.mode == "history":
         system_prompt = f"""
