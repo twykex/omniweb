@@ -44,13 +44,36 @@ def robust_json_parser(text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
 
-    # Strategy: Find the first '{' and the last '}'
-    start = text.find('{')
-    end = text.rfind('}') + 1
-    
-    if start != -1 and end != -1:
-        text = text[start:end]
-    
+    # Strategy: Find the first '{' or '[' and the last '}' or ']'
+    start_obj = text.find('{')
+    start_arr = text.find('[')
+
+    start = -1
+    is_object = False
+
+    if start_obj != -1 and start_arr != -1:
+        if start_obj < start_arr:
+            start = start_obj
+            is_object = True
+        else:
+            start = start_arr
+            is_object = False
+    elif start_obj != -1:
+        start = start_obj
+        is_object = True
+    elif start_arr != -1:
+        start = start_arr
+        is_object = False
+
+    if start != -1:
+        if is_object:
+            end = text.rfind('}') + 1
+        else:
+            end = text.rfind(']') + 1
+
+        if end > start:
+            text = text[start:end]
+
     return text
 
 
@@ -228,7 +251,7 @@ def analyze_node(req: AnalysisRequest):
         Topic: {req.node}
         Task: {prompts.get(req.mode)}
 
-        Output format: Pure JSON Array. No Markdown.
+        Output format: Pure JSON Array. No Markdown. Do not use code blocks.
         Example: [{{ "year": "1905", "title": "Special Relativity", "description": "Einstein publishes his paper..." }}]
         """
     elif req.mode == "quiz":
@@ -258,7 +281,7 @@ def analyze_node(req: AnalysisRequest):
         Format: Markdown with headers (#, ##), bolding (**), and lists (-).
         
         VISUAL AIDS:
-        If a diagram or image would significantly improve understanding (e.g., complex anatomy, mechanical systems, or specific scientific cycles), insert a tag on a new line in the format: .
+        If a diagram or image would significantly improve understanding (e.g., complex anatomy, mechanical systems, or specific scientific cycles), insert a tag on a new line in the format: [Image of <query>].
         - Use sparingly: Only trigger an image if it adds instructional value.
         - Be specific in the query inside the brackets.
         - Place the tag immediately before or after the relevant explanation.

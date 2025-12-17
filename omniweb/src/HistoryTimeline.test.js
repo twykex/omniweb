@@ -26,3 +26,39 @@ test('handles invalid json gracefully', async () => {
     expect(screen.getByText(/Failed to load timeline data/i)).toBeInTheDocument();
   });
 });
+
+test('parses markdown wrapped json', async () => {
+  const jsonString = `
+  Here is the timeline:
+  \`\`\`json
+  [
+    { "year": "1995", "title": "Markdown Event", "description": "Wrapped in code blocks" }
+  ]
+  \`\`\`
+  Hope this helps!
+  `;
+
+  render(<HistoryTimeline jsonString={jsonString} />);
+
+  await waitFor(() => {
+    expect(screen.getByText("1995")).toBeInTheDocument();
+    expect(screen.getByText("Markdown Event")).toBeInTheDocument();
+  });
+});
+
+test('parses array embedded in text without code blocks', async () => {
+  const jsonString = `
+  Sure, here is the data:
+  [
+    { "year": "2020", "title": "Embedded Event", "description": "Found inside text" }
+  ]
+  Thanks.
+  `;
+
+  render(<HistoryTimeline jsonString={jsonString} />);
+
+  await waitFor(() => {
+    expect(screen.getByText("2020")).toBeInTheDocument();
+    expect(screen.getByText("Embedded Event")).toBeInTheDocument();
+  });
+});
