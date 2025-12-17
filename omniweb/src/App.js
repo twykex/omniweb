@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 
@@ -22,8 +21,10 @@ const App = () => {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const res = await axios.get(`${BASE_URL}/models`);
-        const models = res.data.models || [];
+        const res = await fetch(`${BASE_URL}/models`);
+        if (!res.ok) throw new Error('Failed to fetch models');
+        const data = await res.json();
+        const models = data.models || [];
         setAvailableModels(models);
         const smartModel = models.find(m => m.includes("llama3") || m.includes("mistral") || m.includes("gpt")) || models[0];
         setSelectedModel(smartModel || "");
@@ -119,18 +120,26 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     setIsThinking(true);
     try {
       const contextPath = newCols.map(c => c.selectedNode).filter(Boolean).join(" > ");
-      const res = await axios.post(`${BASE_URL}/expand`, {
-        node: node.name,
-        context: contextPath,
-        model: model,
-        temperature: 0.5
+
+      const res = await fetch(`${BASE_URL}/expand`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          node: node.name,
+          context: contextPath,
+          model: model,
+          temperature: 0.5
+        })
       });
 
-      if (res.data.children && res.data.children.length > 0) {
+      if (!res.ok) throw new Error('Failed to expand node');
+      const data = await res.json();
+
+      if (data.children && data.children.length > 0) {
         setColumns([...newCols, {
           id: node.name,
           selectedNode: null,
-          nodes: res.data.children
+          nodes: data.children
         }]);
       }
     } catch (err) {
@@ -145,13 +154,21 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
     try {
       const contextPath = columns.map(c => c.selectedNode).filter(Boolean).join(" > ");
-      const res = await axios.post(`${BASE_URL}/analyze`, {
-        node: nodeName,
-        context: contextPath,
-        model: model,
-        mode: mode
+      const res = await fetch(`${BASE_URL}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          node: nodeName,
+          context: contextPath,
+          model: model,
+          mode: mode
+        })
       });
-      setLessonData({ content: res.data.content, mode: mode, isLoading: false });
+
+      if (!res.ok) throw new Error('Failed to analyze');
+      const data = await res.json();
+
+      setLessonData({ content: data.content, mode: mode, isLoading: false });
     } catch (err) {
       setLessonData({ content: "Connection lost.", mode: mode, isLoading: false });
       addToast("Failed to load lesson", "error");
@@ -375,35 +392,47 @@ const ToastContainer = ({ toasts }) => (
     </div>
 );
 
+const FeatureCard = ({ icon, title, desc }) => (
+  <motion.div
+    className="feature-card"
+    variants={{
+      hidden: { opacity: 0, y: 20 },
+      visible: { opacity: 1, y: 0 }
+    }}
+  >
+    <div className="feature-icon">{icon}</div>
+    <h3>{title}</h3>
+    <p>{desc}</p>
+  </motion.div>
+);
+
 const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, startTopic, setStartTopic }) => (
   <motion.div
-    className="landing-container"
+    className="landing-container custom-scroll"
     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
   >
     <div className="landing-content">
-      <motion.h1
+      <motion.div
         initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1, duration: 0.8 }}
-        className="hero-title"
       >
-        Omni<span className="accent">Web</span>
-      </motion.h1>
-
-      <motion.p
-        initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.8 }}
-        className="hero-subtitle"
-      >
-        The Infinite Learning Engine
-      </motion.p>
+        <h1 className="hero-title">
+          Omni<span className="accent">Web</span>
+        </h1>
+        <p className="hero-subtitle">
+          The Infinite Learning Engine.<br/>
+          Designed for students, researchers, and the endlessly curious.
+        </p>
+      </motion.div>
 
       <motion.div
         className="search-wrapper"
-        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5 }}
+        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.3 }}
       >
         <input
             type="text"
             value={startTopic}
             onChange={(e) => setStartTopic(e.target.value)}
-            placeholder="Search any topic (e.g., Black Holes, Jazz)..."
+            placeholder="What do you want to learn today?"
             onKeyDown={(e) => e.key === 'Enter' && startTopic.trim() && onStart()}
             autoFocus
         />
@@ -413,11 +442,11 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
       </motion.div>
 
       <motion.div
-         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
+         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
          className="landing-footer"
       >
          {isLoading ? (
-             <span className="status-connecting">INITIALIZING SYSTEM...</span>
+             <span className="status-connecting">INITIALIZING BRAIN...</span>
          ) : (
              <div className="model-selector-pill">
                  <span className="dot online"></span>
@@ -426,6 +455,43 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
                  </select>
              </div>
          )}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
+        className="kicker"
+      >
+        THE NEW AGE OF LEARNING
+      </motion.div>
+
+      <motion.div
+        className="features-grid"
+        initial="hidden"
+        animate="visible"
+        variants={{
+          visible: { transition: { staggerChildren: 0.1, delayChildren: 0.8 } }
+        }}
+      >
+        <FeatureCard
+            icon="🌌"
+            title="Infinite Recursion"
+            desc="Recursively break down topics forever. There is no limit to how deep you can go."
+        />
+        <FeatureCard
+            icon="🧠"
+            title="Visual Knowledge"
+            desc="Navigate ideas spatially with Miller Columns. See how every concept connects."
+        />
+        <FeatureCard
+            icon="🎓"
+            title="Deep Insights"
+            desc="Get professor-style explanations, historical context, and real-world impact instantly."
+        />
+        <FeatureCard
+            icon="🛡️"
+            title="Local & Private"
+            desc="Powered by local LLMs running on your machine. Your learning journey is 100% private."
+        />
       </motion.div>
     </div>
   </motion.div>
@@ -469,14 +535,34 @@ const GlobalCSS = () => (
     }
 
     /* LANDING */
-    .landing-container { height: 100vh; display: flex; justify-content: center; align-items: center; position: relative; z-index: 10; }
-    .landing-content { text-align: center; width: 100%; max-width: 650px; padding: 20px; }
+    .landing-container {
+        height: 100vh;
+        width: 100%;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        z-index: 10;
+        padding: 40px 20px;
+        box-sizing: border-box;
+    }
+    .landing-content {
+        margin: auto;
+        text-align: center;
+        width: 100%;
+        max-width: 900px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
 
     .hero-title { font-family: 'Playfair Display', serif; font-size: 80px; margin: 0; font-weight: 600; color: #fff; letter-spacing: -2px; }
     .accent { background: linear-gradient(135deg, #a78bfa, #22d3ee); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-style: italic; }
-    .hero-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 50px; font-weight: 300; letter-spacing: 0.5px; }
+    .hero-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 40px; font-weight: 300; letter-spacing: 0.5px; line-height: 1.6; }
 
     .search-wrapper {
+        width: 100%; max-width: 600px;
         position: relative; background: rgba(255,255,255,0.03); padding: 6px; border-radius: 100px;
         border: 1px solid var(--glass-border); display: flex; transition: all 0.3s; backdrop-filter: blur(10px);
     }
@@ -485,10 +571,38 @@ const GlobalCSS = () => (
     .go-btn { width: 54px; height: 54px; border-radius: 50%; border: none; background: #fff; color: #000; font-size: 20px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
     .go-btn:hover { transform: scale(1.05); background: #e0e7ff; }
 
-    .landing-footer { margin-top: 40px; }
+    .landing-footer { margin-top: 30px; margin-bottom: 60px; }
     .model-selector-pill { display: inline-flex; align-items: center; background: rgba(255,255,255,0.05); padding: 8px 16px; border-radius: 20px; border: 1px solid var(--glass-border); gap: 10px; backdrop-filter: blur(5px); }
     .model-selector-pill select { background: transparent; border: none; color: var(--text-muted); outline: none; cursor: pointer; font-size: 13px; font-family: 'Inter'; }
     .dot.online { width: 6px; height: 6px; background: #34d399; border-radius: 50%; box-shadow: 0 0 8px #34d399; }
+
+    .kicker { font-size: 11px; font-weight: 700; letter-spacing: 3px; color: var(--secondary); margin-bottom: 30px; text-transform: uppercase; opacity: 0.8; }
+
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(1, 1fr);
+        gap: 20px;
+        width: 100%;
+    }
+    @media (min-width: 640px) { .features-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1024px) { .features-grid { grid-template-columns: repeat(4, 1fr); } }
+
+    .feature-card {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        padding: 24px 20px;
+        text-align: left;
+        transition: transform 0.3s, background 0.3s;
+    }
+    .feature-card:hover {
+        background: rgba(255, 255, 255, 0.05);
+        transform: translateY(-5px);
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+    .feature-icon { font-size: 28px; margin-bottom: 16px; }
+    .feature-card h3 { color: #fff; font-size: 16px; margin: 0 0 8px 0; font-weight: 600; letter-spacing: -0.2px; }
+    .feature-card p { color: var(--text-muted); font-size: 13px; margin: 0; line-height: 1.6; }
 
     /* HEADER */
     .hud-header { height: 70px; display: flex; align-items: center; padding: 0 30px; border-bottom: 1px solid var(--glass-border); background: rgba(8, 8, 11, 0.6); backdrop-filter: blur(20px); z-index: 10; justify-content: space-between; }
