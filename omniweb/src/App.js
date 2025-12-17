@@ -206,7 +206,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit }) => {
                 </div>
 
                 <div className="panel-tabs">
-                    {['explain', 'history', 'impact'].map(m => (
+                    {['explain', 'history', 'impact', 'eli5', 'future', 'quiz'].map(m => (
                         <button
                             key={m}
                             className={lessonData.mode === m ? 'active' : ''}
@@ -279,6 +279,9 @@ const NodeCard = ({ node, isActive, onClick, onAction }) => {
             <ActionButton label="Explain" onClick={() => onAction('explain')} />
             <ActionButton label="History" onClick={() => onAction('history')} />
             <ActionButton label="Impact" onClick={() => onAction('impact')} />
+            <ActionButton label="ELI5" onClick={() => onAction('eli5')} />
+            <ActionButton label="Future" onClick={() => onAction('future')} />
+            <ActionButton label="Quiz" onClick={() => onAction('quiz')} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -459,9 +462,9 @@ const GlobalCSS = () => (
     .node-name { font-size: 20px; font-weight: 500; margin-bottom: 6px; color: #fff; letter-spacing: -0.3px; }
     .node-desc { font-size: 15px; color: var(--text-muted); line-height: 1.5; font-weight: 300; }
 
-    .node-actions { display: flex; gap: 8px; margin-top: 20px; overflow: hidden; position: relative; z-index: 2; }
+    .node-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; overflow: hidden; position: relative; z-index: 2; }
     .action-btn {
-        flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+        flex: 1 1 30%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
         color: #e5e7eb; padding: 10px 0; border-radius: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
         cursor: pointer; transition: 0.2s;
     }
@@ -484,7 +487,8 @@ const GlobalCSS = () => (
     .panel-kicker { font-size: 11px; font-weight: 700; color: var(--secondary); letter-spacing: 2px; margin-bottom: 12px; text-transform: uppercase; }
     .panel-header h3 { font-family: 'Playfair Display', serif; font-size: 42px; margin: 0; color: #fff; line-height: 1.1; letter-spacing: -0.5px; }
 
-    .panel-tabs { display: flex; padding: 0 50px; border-bottom: 1px solid var(--glass-border); gap: 30px; }
+    .panel-tabs { display: flex; padding: 0 50px; border-bottom: 1px solid var(--glass-border); gap: 30px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .panel-tabs::-webkit-scrollbar { display: none; }
     .panel-tabs button {
         background: none; border: none; padding: 20px 0; color: var(--text-muted);
         font-size: 11px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; letter-spacing: 1px;
