@@ -244,15 +244,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
   const readingTime = lessonData && lessonData.content && lessonData.content.trim() ? Math.ceil(lessonData.content.split(/\s+/).length / 200) : 0;
 
-  // Transform 
-
-[Image of X]
- into a custom Markdown image format for rendering
-  const processedContent = lessonData?.content?.replace(
-      /\/g, 
-      '![Diagram: $1](https://source.unsplash.com/1600x900/?$1)' 
-      // Note: In a real app, you'd use a specific diagram API or Google Search URL
-  ) || "";
+  const processedContent = lessonData?.content || "";
 
   return (
     <motion.div 
@@ -357,14 +349,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                     </div>
                 ) : (
                     <ReactMarkdown components={{
-                        blockquote: ({node, ...props}) => <div className="quote-box" {...props} />,
-                        img: ({node, ...props}) => (
-                            <div className="diagram-container">
-                                <div className="diagram-label">DIAGRAM</div>
-                                <img {...props} className="lesson-image" alt={props.alt} />
-                                <div className="diagram-caption">Visual representation of: {props.alt.replace('Diagram: ', '')}</div>
-                            </div>
-                        )
+                        blockquote: ({node, ...props}) => <div className="quote-box" {...props} />
                     }}>
                         {processedContent}
                     </ReactMarkdown>
@@ -963,40 +948,6 @@ const GlobalCSS = () => (
         padding: 24px; margin: 30px 0; font-style: italic; color: #e5e7eb; border-radius: 0 8px 8px 0;
     }
 
-    /* DIAGRAM/IMAGE STYLES */
-    .diagram-container {
-        margin: 30px 0;
-        background: rgba(255,255,255,0.02);
-        border: 1px solid var(--glass-border);
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    .diagram-label {
-        background: rgba(6, 182, 212, 0.1); /* Cyan */
-        color: var(--secondary);
-        font-family: 'Inter', sans-serif;
-        font-size: 10px;
-        font-weight: 700;
-        padding: 6px 12px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    .lesson-image {
-        width: 100%;
-        height: auto;
-        display: block;
-        opacity: 0.8;
-        transition: opacity 0.3s;
-    }
-    .lesson-image:hover { opacity: 1; }
-    .diagram-caption {
-        font-family: 'Inter', sans-serif;
-        font-size: 12px;
-        color: var(--text-muted);
-        padding: 10px 15px;
-        border-top: 1px solid var(--glass-border);
-        background: rgba(0,0,0,0.2);
-    }
 
     .panel-footer { padding: 20px 50px; border-top: 1px solid var(--glass-border); display: flex; justify-content: flex-end; gap: 12px; background: rgba(0,0,0,0.3); }
     .panel-footer button { 
