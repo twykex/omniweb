@@ -217,11 +217,21 @@ def analyze_node(req: AnalysisRequest):
         "impact": f"Analyze the significance of '{req.node}'. Why does it matter to humanity or the universe? What are the ethical or practical implications?",
         "eli5": f"Explain '{req.node}' to a 5-year-old. Use simple words and fun examples.",
         "future": f"Speculate on the future of '{req.node}'. What advances or changes can we expect in the next 50 years?",
-        "quiz": f"Create a 3-question multiple choice quiz about '{req.node}'. Format: Question, Options, then Answer at the very end."
+        "quiz": f"Create a 3-question multiple choice quiz about '{req.node}'. Return ONLY valid JSON. The JSON should be an object with a key 'questions' which is a list of objects. Each question object must have: 'question' (string), 'options' (list of 4 strings), 'correct_index' (integer 0-3), and 'explanation' (string). Do not use markdown formatting."
     }
 
     # Added diagram instructions to the system prompt
-    system_prompt = f"""
+    if req.mode == "quiz":
+        system_prompt = f"""
+    Context: {req.context}
+    Topic: {req.node}
+    Task: {prompts.get(req.mode)}
+
+    Style: Engaging, Professor-like, Clear.
+    Format: JSON only. Do not use Markdown code blocks.
+    """
+    else:
+        system_prompt = f"""
     Context: {req.context}
     Topic: {req.node}
     Task: {prompts.get(req.mode)}
