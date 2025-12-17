@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -8,6 +8,20 @@ const BASE_URL = "http://localhost:8000";
 
 // Suggested topics from Main branch
 const SUGGESTED_TOPICS = ["Neural Networks", "The Renaissance", "Mars Colonization", "Jazz History"];
+
+// --- HELPERS ---
+
+// Converts "" tags into Markdown images with a generation URL
+const processAutoDiagrams = (text) => {
+  if (!text) return "";
+  const regex = /\/g;
+  return text.replace(regex, (match, query) => {
+    // We append specific keywords to ensure the AI generator creates a diagram style image
+    const prompt = encodeURIComponent(`educational scientific diagram schematic white on black background: ${query}`);
+    const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=450&nologo=true&seed=${query.length}`;
+    return `\n\n![${query}](${url})\n\n`;
+  });
+};
 
 const App = () => {
   const [hasStarted, setHasStarted] = useState(false);
@@ -98,7 +112,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
   const [columns, setColumns] = useState([{ 
     id: "root", 
     selectedNode: null, 
-    nodes: [{ name: initialTopic, desc: "The starting point of your journey.", status: "concept" }] 
+    nodes: [{ name: initialTopic, desc: "The starting point of your journey.", status: "concept" }],
+    seenNodes: [initialTopic]
   }]);
 
   const [lessonData, setLessonData] = useState(null);
@@ -147,7 +162,7 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     try {
       const contextPath = newCols.map(c => c.selectedNode).filter(Boolean).join(" > ");
       
-      // Send recent nodes to avoid duplicates (from Main branch logic)
+      // Send recent nodes to avoid duplicates
       const recentNodes = [];
       if (columns[colIndex]) columns[colIndex].nodes.forEach(n => recentNodes.push(n.name));
       if (colIndex > 0 && columns[colIndex - 1]) columns[colIndex - 1].nodes.forEach(n => recentNodes.push(n.name));
@@ -164,7 +179,8 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
         setColumns([...newCols, { 
           id: node.name, 
           selectedNode: null, 
-          nodes: res.data.children 
+          nodes: res.data.children,
+          seenNodes: res.data.children.map(c => c.name)
         }]);
       } else {
         addToast("Could not expand this topic. Try again.", "warning");
@@ -173,6 +189,51 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
         console.error(err);
         addToast("Failed to expand node", "error");
     } finally { setIsThinking(false); }
+  };
+
+  const handleRegenerate = async (colIndex) => {
+    if (isThinking) return;
+    if (colIndex === 0) return;
+
+    const col = columns[colIndex];
+    const parentNodeName = col.id;
+    const parentCols = columns.slice(0, colIndex);
+    const contextPath = parentCols.map(c => c.selectedNode).filter(Boolean).join(" > ");
+
+    const currentSeen = col.seenNodes || col.nodes.map(n => n.name);
+    const parentSiblings = columns[colIndex - 1].nodes.map(n => n.name);
+    const avoidList = [...new Set([...currentSeen, ...parentSiblings, parentNodeName])];
+
+    setIsThinking(true);
+    try {
+        const res = await axios.post(`${BASE_URL}/expand`, {
+            node: parentNodeName,
+            context: contextPath,
+            model: model,
+            temperature: 0.7,
+            recent_nodes: avoidList
+        });
+
+        if (res.data.children && res.data.children.length > 0) {
+            // Truncate future columns as we are changing the current level's nodes
+            const newCols = columns.slice(0, colIndex + 1);
+            newCols[colIndex] = {
+                ...col,
+                selectedNode: null, // Clear selection as the node might be gone
+                nodes: res.data.children,
+                seenNodes: [...currentSeen, ...res.data.children.map(c => c.name)]
+            };
+            setColumns(newCols);
+            addToast("Regenerated level!", "success");
+        } else {
+             addToast("No new unique topics found.", "warning");
+        }
+    } catch (err) {
+        console.error(err);
+        addToast("Regeneration failed", "error");
+    } finally {
+        setIsThinking(false);
+    }
   };
 
   const openLesson = async (nodeName, mode, quizConfig = null) => {
@@ -194,7 +255,6 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
     try {
       const contextPath = columns.map(c => c.selectedNode).filter(Boolean).join(" > ");
       
-      // Use fetch for Streaming (from Main branch logic)
       const response = await fetch(`${BASE_URL}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -264,7 +324,10 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 
   const readingTime = lessonData && lessonData.content && lessonData.content.trim() ? Math.ceil(lessonData.content.split(/\s+/).length / 200) : 0;
 
-  const processedContent = lessonData?.content || "";
+  // Process content to find  tags and convert to visual markdown
+  const processedContent = useMemo(() => {
+    return processAutoDiagrams(lessonData?.content || "");
+  }, [lessonData?.content]);
 
   return (
     <motion.div 
@@ -306,6 +369,15 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
           >
             <div className="column-header">
               LEVEL {colIdx + 1}
+              {colIdx > 0 && (
+                <button
+                  className="regenerate-btn"
+                  onClick={() => handleRegenerate(colIdx)}
+                  title="Regenerate with new topics"
+                >
+                  ↻
+                </button>
+              )}
             </div>
             <div className="node-list">
               {col.nodes.map((node) => (
@@ -379,7 +451,9 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
                         <QuizInterface content={lessonData.content} quizConfig={lessonData.quizConfig} />
                     ) : (
                     <ReactMarkdown components={{
-                        blockquote: ({node, ...props}) => <div className="quote-box" {...props} />
+                        blockquote: ({node, ...props}) => <div className="quote-box" {...props} />,
+                        // Custom renderer for images to act as diagrams
+                        img: ({src, alt}) => <DiagramWidget src={src} title={alt} />
                     }}>
                         {processedContent}
                     </ReactMarkdown>
@@ -403,6 +477,34 @@ const LearningWorkspace = ({ model, initialTopic, onExit, addToast }) => {
 };
 
 // --- SUB COMPONENTS ---
+
+const DiagramWidget = ({ src, title }) => {
+    const [loaded, setLoaded] = useState(false);
+    
+    return (
+        <div className="diagram-widget">
+            <div className="dw-header">
+                <span className="dw-icon">⎔</span>
+                <span className="dw-title">GENERATED DIAGRAM: {title.toUpperCase()}</span>
+            </div>
+            <div className="dw-frame">
+                {!loaded && (
+                    <div className="dw-loader">
+                        <div className="spinner"></div>
+                        <span>Rendering Schematic...</span>
+                    </div>
+                )}
+                <img 
+                    src={src} 
+                    alt={title} 
+                    className="dw-image" 
+                    style={{ opacity: loaded ? 1 : 0 }}
+                    onLoad={() => setLoaded(true)}
+                />
+            </div>
+        </div>
+    );
+};
 
 const TimelineBar = ({ columns, onJump }) => {
   return (
@@ -428,12 +530,12 @@ const TimelineBar = ({ columns, onJump }) => {
                   title={isLast ? "Current View" : `Jump to ${label}`}
                 >
                   <div className="t-dot">
-                     {i === 0 ? (
-                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                     ) : (
-                       <span>{i + 1}</span>
-                     )}
-                     {isLast && <motion.div layoutId="pulse" className="t-pulse" />}
+                      {i === 0 ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                      ) : (
+                        <span>{i + 1}</span>
+                      )}
+                      {isLast && <motion.div layoutId="pulse" className="t-pulse" />}
                   </div>
                   <div className="t-info">
                     <span className="t-label">{label}</span>
@@ -593,7 +695,7 @@ const QuizConfig = ({ onStart }) => {
 
           <div className="config-item">
             <label>Questions: {numQuestions}</label>
-            <input
+            <input 
               type="range" min="3" max="10" step="1"
               value={numQuestions}
               onChange={(e) => setNumQuestions(parseInt(e.target.value))}
@@ -687,7 +789,7 @@ const QuizInterface = ({ content, quizConfig }) => {
                   <span className="score-num">{percentage}%</span>
               </div>
               <p>You got {score} out of {quizData.questions.length} correct.</p>
-
+              
               <div className="results-review">
                   <h4>Review</h4>
                   {quizData.questions.map((q, i) => {
@@ -735,7 +837,7 @@ const QuizInterface = ({ content, quizConfig }) => {
           </div>
 
           <AnimatePresence mode="wait">
-            <motion.div
+            <motion.div 
                 key={currentQuestion}
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -745,7 +847,7 @@ const QuizInterface = ({ content, quizConfig }) => {
                 <h3 className="quiz-question">{question.question}</h3>
                 <div className="quiz-options">
                     {question.options.map((opt, idx) => (
-                        <button
+                        <button 
                             key={idx}
                             className={`quiz-option ${selectedOption === idx ? (idx === question.correct_index ? 'correct' : 'wrong') : ''} ${showResult && idx === question.correct_index ? 'correct' : ''}`}
                             onClick={() => handleOptionClick(idx)}
@@ -816,15 +918,15 @@ const ModelSelector = ({ models, selected, onSelect }) => {
 
       <AnimatePresence>
         {isOpen && (
-          <motion.div
+          <motion.div 
             className="model-dropdown"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
           >
             {models.map(m => (
-              <div
-                key={m.name}
+              <div 
+                key={m.name} 
                 className={`model-option ${m.name === selected ? 'selected' : ''} ${!m.fits ? 'warning' : ''}`}
                 onClick={() => {
                     onSelect(m.name);
@@ -883,7 +985,7 @@ const LandingInterface = ({ models, selected, onSelect, onStart, isLoading, star
               disabled={backendError}
           />
           <button onClick={onStart} disabled={isLoading || backendError || !startTopic.trim()} className="go-btn">
-               ➜
+                ➜
           </button>
         </motion.div>
 
@@ -1154,7 +1256,15 @@ const GlobalCSS = () => (
     .miller-columns-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
     .column { min-width: var(--col-width); width: var(--col-width); display: flex; flex-direction: column; }
-    .column-header { font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 16px; letter-spacing: 1.5px; opacity: 0.6; }
+    .column-header {
+      font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 16px;
+      letter-spacing: 1.5px; opacity: 0.6; display: flex; justify-content: space-between; align-items: center;
+    }
+    .regenerate-btn {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 14px; transition: color 0.2s; padding: 0; line-height: 1;
+    }
+    .regenerate-btn:hover { color: var(--primary); }
     .node-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 100px; }
 
     /* NODE CARDS */
@@ -1393,7 +1503,7 @@ const GlobalCSS = () => (
     .quiz-progress { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--secondary); font-weight: 700; }
     .quiz-question { font-size: 22px; color: #fff; margin: 0; font-family: 'Inter', sans-serif; font-weight: 600; }
     .quiz-options { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-    .quiz-option {
+    .quiz-option { 
         background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
         padding: 16px; border-radius: 8px; color: #d1d5db; text-align: left; cursor: pointer;
         transition: 0.2s; font-size: 15px; position: relative;
@@ -1405,7 +1515,7 @@ const GlobalCSS = () => (
     .next-btn { display: block; margin-top: 15px; background: var(--primary); border: none; padding: 10px 20px; border-radius: 6px; color: #fff; font-weight: 600; cursor: pointer; float: right; }
 
     .quiz-results { text-align: center; padding: 40px; }
-    .score-circle {
+    .score-circle { 
         width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--primary);
         display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto;
         font-size: 32px; font-weight: 700; color: #fff;
@@ -1419,14 +1529,14 @@ const GlobalCSS = () => (
     .config-grid { display: flex; flex-direction: column; gap: 30px; margin-bottom: 40px; }
     .config-item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
     .config-item label { font-size: 11px; font-weight: 700; color: var(--secondary); letter-spacing: 1px; text-transform: uppercase; }
-
+    
     .segmented-control { display: flex; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 4px; gap: 4px; }
     .segmented-control button { flex: 1; background: transparent; border: none; padding: 8px 16px; color: var(--text-muted); font-size: 12px; cursor: pointer; border-radius: 6px; transition: 0.2s; font-weight: 500; }
     .segmented-control button:hover { color: #fff; }
     .segmented-control button.active { background: var(--primary); color: #fff; }
 
     .range-slider { width: 100%; max-width: 200px; accent-color: var(--primary); }
-
+    
     .start-quiz-btn { background: #fff; color: #000; border: none; padding: 14px 40px; font-size: 14px; font-weight: 700; border-radius: 50px; cursor: pointer; transition: 0.2s; letter-spacing: 1px; }
     .start-quiz-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,255,255,0.3); }
 
@@ -1442,6 +1552,18 @@ const GlobalCSS = () => (
     .review-item { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); }
     .review-q { font-size: 14px; color: #fff; margin-bottom: 6px; font-weight: 500; }
     .review-ans { font-size: 12px; font-family: monospace; }
+    
+    /* DIAGRAM WIDGET STYLES */
+    .diagram-widget { margin: 40px 0; border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden; background: rgba(0,0,0,0.4); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+    .dw-header { background: rgba(255,255,255,0.03); padding: 12px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--glass-border); }
+    .dw-icon { color: var(--secondary); font-size: 18px; }
+    .dw-title { font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 1.5px; }
+    .dw-frame { position: relative; width: 100%; min-height: 200px; display: flex; align-items: center; justify-content: center; background: #000; }
+    .dw-image { width: 100%; height: auto; display: block; transition: opacity 0.5s ease; }
+    .dw-loader { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; color: var(--text-muted); font-size: 12px; font-family: monospace; }
+    
+    .spinner { width: 30px; height: 30px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--secondary); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   `}</style>
 );
 

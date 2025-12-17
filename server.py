@@ -156,7 +156,7 @@ def expand_node(req: ExpandRequest):
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0.4, "num_ctx": 4096}
+            "options": {"temperature": req.temperature, "num_ctx": 4096}
         }
         try:
             response = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=60)
