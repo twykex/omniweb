@@ -74,9 +74,13 @@ def robust_json_parser(text):
     # Fallback to simple extraction if robust parsing fails
     # This might return invalid JSON if multiple objects exist, but it's a best effort
     if start != -1:
-        end_obj = text.rfind('}') + 1
-        end_arr = text.rfind(']') + 1
-        end = max(end_obj, end_arr)
+        start_char = text[start]
+        if start_char == '{':
+            end = text.rfind('}') + 1
+        elif start_char == '[':
+            end = text.rfind(']') + 1
+        else:
+            end = -1
 
         if end > start:
             return text[start:end]

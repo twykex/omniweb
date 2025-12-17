@@ -135,7 +135,14 @@ def expand_node(req: ExpandRequest):
     data = call_llm(req.model, system_prompt)
 
     def filter_response(data, recent_nodes):
-        if not data or not isinstance(data, dict) or "children" not in data or not data["children"]:
+        if not data:
+            return None
+
+        # If data is a list, treat it as children
+        if isinstance(data, list):
+            data = {"children": data}
+
+        if not isinstance(data, dict) or "children" not in data or not data["children"]:
             return None
 
         # Check for Forbidden Topics and Duplicates
