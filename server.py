@@ -198,6 +198,8 @@ def analyze_node(req: AnalysisRequest):
         "code": f"Provide a code example or technical demonstration related to '{req.node}'. If it is a programming concept, show code. If it is a scientific concept, show a formula or a simulation algorithm. Use proper markdown code blocks.",
         "proscons": f"Analyze the Pros and Cons of '{req.node}'. Present them in a clear Markdown table or list.",
         "debate": f"Simulate a short debate between two experts holding opposing views on '{req.node}'. Label them as 'Proponent' and 'Skeptic'.",
+        "glossary": f"Create a comprehensive Glossary of Key Terms related to '{req.node}'. Format as a Markdown list where the term is bolded (e.g., - **Term**: Definition). Include at least 10 terms.",
+        "sources": f"List 5-10 essential books, research papers, or primary sources to learn more about '{req.node}'. Format as a Markdown list with brief annotations explaining why each source is important.",
         "quiz": f"Create a {req.num_questions}-question multiple choice quiz about '{req.node}'. Difficulty: {req.difficulty}. Return ONLY valid JSON. The JSON should be an object with a key 'questions' which is a list of objects. Each question object must have: 'question' (string), 'options' (list of 4 strings), 'correct_index' (integer 0-3), and 'explanation' (string). Do not use markdown formatting."
     }
 

@@ -42,6 +42,8 @@ const NodeCard = ({ node, isActive, onClick, onAction }) => {
             <ActionButton icon={<Icons.Code />} label="Code" onClick={() => onAction('code')} />
             <ActionButton icon={<Icons.ProsCons />} label="Pros/Cons" onClick={() => onAction('proscons')} />
             <ActionButton icon={<Icons.Debate />} label="Debate" onClick={() => onAction('debate')} />
+            <ActionButton icon={<Icons.Glossary />} label="Glossary" onClick={() => onAction('glossary')} />
+            <ActionButton icon={<Icons.Sources />} label="Sources" onClick={() => onAction('sources')} />
             <ActionButton icon={<Icons.Quiz />} label="Quiz" onClick={() => onAction('quiz')} />
           </motion.div>
         )}
