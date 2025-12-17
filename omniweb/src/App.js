@@ -11,10 +11,10 @@ const SUGGESTED_TOPICS = ["Neural Networks", "The Renaissance", "Mars Colonizati
 
 // --- HELPERS ---
 
-// Converts "" tags into Markdown images with a generation URL
+// Converts "[Image of X]" tags into Markdown images with a generation URL
 const processAutoDiagrams = (text) => {
   if (!text) return "";
-  const regex = /\/g;
+  const regex = /\[Image of (.*?)\]/g;
   return text.replace(regex, (match, query) => {
     // We append specific keywords to ensure the AI generator creates a diagram style image
     const prompt = encodeURIComponent(`educational scientific diagram schematic white on black background: ${query}`);
