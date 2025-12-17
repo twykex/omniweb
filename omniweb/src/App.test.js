@@ -1,14 +1,12 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import App from './App';
+import axios from 'axios';
 
 // --- MOCKS ---
 
-// Mock Axios (used in Main branch logic)
-jest.mock('axios', () => ({
-  get: jest.fn().mockResolvedValue({ data: { models: [{ name: 'llama3', fits: true }] } }),
-  post: jest.fn(),
-}));
+// Mock Axios (uses __mocks__/axios.js)
+jest.mock('axios');
 
 // Mock Global Fetch (used in Redesign branch logic fallback or specific components)
 global.fetch = jest.fn(() =>
@@ -39,7 +37,7 @@ jest.mock('react-markdown', () => ({
 describe('App Integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    const axios = require('axios');
+    // Default success mock
     axios.get.mockResolvedValue({ data: { models: [{ name: 'llama3', fits: true }] } });
   });
 
@@ -82,7 +80,6 @@ describe('App Integration', () => {
 
   test('shows backend offline message when API fails', async () => {
     // Override the default mock for this specific test
-    const axios = require('axios');
     axios.get.mockRejectedValueOnce(new Error("Backend Offline"));
 
     render(<App />);
