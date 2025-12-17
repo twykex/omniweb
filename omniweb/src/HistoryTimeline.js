@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { robustJsonParse } from "./helpers";
 import "./HistoryTimeline.css";
 
 export const HistoryTimeline = ({ jsonString }) => {
@@ -11,51 +12,8 @@ export const HistoryTimeline = ({ jsonString }) => {
     useEffect(() => {
         try {
             if (!jsonString) return;
-            // cleaning the json string
-            let cleanJson = jsonString.trim();
-            cleanJson = cleanJson.replace(/```json/gi, "").replace(/```/g, "");
 
-            let parsed = null;
-            try {
-                parsed = JSON.parse(cleanJson);
-            } catch (e) {
-                // Failed to parse, try to extract array
-                const start = cleanJson.indexOf('[');
-                if (start !== -1) {
-                    // Try to find the matching closing bracket robustly
-                    let stack = 0;
-                    let end = -1;
-                    let inString = false;
-                    for (let i = start; i < cleanJson.length; i++) {
-                        const char = cleanJson[i];
-                        if (char === '"' && cleanJson[i-1] !== '\\') inString = !inString;
-                        if (!inString) {
-                            if (char === '[') stack++;
-                            else if (char === ']') {
-                                stack--;
-                                if (stack === 0) {
-                                    end = i + 1;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (end !== -1) {
-                        parsed = JSON.parse(cleanJson.substring(start, end));
-                    } else {
-                        // Fallback to last bracket if stack method fails or is incomplete
-                        const fallbackEnd = cleanJson.lastIndexOf(']') + 1;
-                        if (fallbackEnd > start) {
-                             parsed = JSON.parse(cleanJson.substring(start, fallbackEnd));
-                        } else {
-                            throw e;
-                        }
-                    }
-                } else {
-                    throw e;
-                }
-            }
+            const parsed = robustJsonParse(jsonString, 'array');
 
             let parsedEvents = [];
 

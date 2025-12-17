@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { robustJsonParse } from "../helpers";
 
 export const QuizConfig = ({ onStart }) => {
   const [difficulty, setDifficulty] = useState("medium");
@@ -59,48 +60,7 @@ export const QuizInterface = ({ content, quizConfig, onNewQuiz }) => {
 
   useEffect(() => {
     try {
-      let jsonStr = content.trim();
-      jsonStr = jsonStr.replace(/```json/gi, "").replace(/```/g, "");
-      const start = jsonStr.indexOf('{');
-
-      let parsedData = null;
-
-      if (start !== -1) {
-          let stack = 0;
-          let end = -1;
-          let inString = false;
-          for (let i = start; i < jsonStr.length; i++) {
-              const char = jsonStr[i];
-              if (char === '"' && jsonStr[i-1] !== '\\') inString = !inString;
-              if (!inString) {
-                  if (char === '{') stack++;
-                  else if (char === '}') {
-                      stack--;
-                      if (stack === 0) {
-                          end = i + 1;
-                          break;
-                      }
-                  }
-              }
-          }
-
-          if (end !== -1) {
-               try {
-                   parsedData = JSON.parse(jsonStr.substring(start, end));
-               } catch(err) {
-                   console.warn("Robust parse failed, trying fallback", err);
-               }
-          }
-
-          if (!parsedData) {
-               const fallbackEnd = jsonStr.lastIndexOf('}') + 1;
-               if (fallbackEnd > start) {
-                    try {
-                        parsedData = JSON.parse(jsonStr.substring(start, fallbackEnd));
-                    } catch(err) {}
-               }
-          }
-      }
+      const parsedData = robustJsonParse(content, 'object');
 
       if (parsedData && parsedData.questions) {
           setQuizData(parsedData);
